@@ -17,6 +17,9 @@ Do not disclose unresolved vulnerabilities publicly before maintainers have had 
 Repo scope writes:
 
 - `<repo>/plugins/meta-flow`
+- `<repo>/.agents/skills/meta-flow`
+- `<repo>/.meta-flow/scripts`
+- `<repo>/.meta-flow/templates`
 - `<repo>/.agents/plugins/marketplace.json`
 - `<repo>/.codex/agents/*.toml`
 - `<repo>/.codex/config.toml`
@@ -24,6 +27,9 @@ Repo scope writes:
 User scope writes:
 
 - `~/.codex/plugins/meta-flow`
+- `~/.agents/skills/meta-flow`
+- `~/.meta-flow/scripts`
+- `~/.meta-flow/templates`
 - `~/.agents/plugins/marketplace.json`
 - `~/.codex/agents/*.toml`
 - `~/.codex/config.toml`
@@ -41,7 +47,7 @@ User scope writes:
 Prefer version pinning:
 
 ```bash
-npx @bx-h/meta-flow@0.1.0 install --scope repo
+npx @bx-h/meta-flow@0.1.1 install --scope repo
 ```
 
 Preview writes:

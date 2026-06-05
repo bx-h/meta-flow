@@ -8,6 +8,8 @@ import { createLogger } from "../lib/logger.js";
 import { updateMarketplace } from "../lib/marketplace.js";
 import { installPlugin } from "../lib/plugin.js";
 import { resolveTargets } from "../lib/paths.js";
+import { installSkill } from "../lib/skill.js";
+import { installSupportFiles } from "../lib/support.js";
 
 export function installHelp() {
   return `Usage: meta-flow install --scope repo|user [options]
@@ -61,6 +63,18 @@ export async function runInstall(argv = []) {
     }
   }
 
+  const skillResult = await installSkill(targets, { dryRun, force, backup, logger });
+  if (skillResult.conflict) {
+    logger.warn(`skill target exists and is not managed by meta-flow: ${skillResult.conflict}. Re-run with --force to overwrite.`);
+  }
+
+  const supportResult = await installSupportFiles(targets, { dryRun, force, backup, logger });
+  for (const [name, result] of Object.entries(supportResult)) {
+    if (result.conflict) {
+      logger.warn(`${name} target exists and is not managed by meta-flow: ${result.conflict}. Re-run with --force to overwrite.`);
+    }
+  }
+
   await updateMarketplace(targets, { dryRun, logger });
 
   if (installAgentsEnabled) {
@@ -95,6 +109,8 @@ function printInstallPlan(targets, options) {
   console.log(`- scope: ${targets.scope}`);
   console.log(`- target: ${targets.target}`);
   console.log(`- plugin: ${targets.pluginTarget}`);
+  console.log(`- skill: ${targets.skillTarget}`);
+  console.log(`- support: ${targets.supportTarget}`);
   console.log(`- marketplace: ${targets.marketplaceTarget}`);
   console.log(`- agents: ${targets.agentsTarget}`);
   console.log(`- config: ${targets.codexConfigTarget}`);
@@ -105,6 +121,8 @@ function printInstallPlan(targets, options) {
   if (options.installAgentsEnabled) {
     console.log("- install 14 agent templates");
   }
+  console.log("- install discoverable skill");
+  console.log("- install support scripts and templates");
   console.log("- update marketplace");
   console.log("- ensure Codex agent config");
   if (options.dryRun) {

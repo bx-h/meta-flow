@@ -26,7 +26,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.0 install --scope repo
+npx @bx-h/meta-flow@0.1.1 install --scope repo
 ```
 
 ## Quick Start
@@ -117,6 +117,9 @@ flowchart LR
 Repo scope writes under the target repo:
 
 - `<repo>/plugins/meta-flow`
+- `<repo>/.agents/skills/meta-flow`
+- `<repo>/.meta-flow/scripts`
+- `<repo>/.meta-flow/templates`
 - `<repo>/.agents/plugins/marketplace.json`
 - `<repo>/.codex/agents/*.toml`
 - `<repo>/.codex/config.toml`
@@ -124,6 +127,9 @@ Repo scope writes under the target repo:
 User scope writes under the current user home:
 
 - `~/.codex/plugins/meta-flow`
+- `~/.agents/skills/meta-flow`
+- `~/.meta-flow/scripts`
+- `~/.meta-flow/templates`
 - `~/.agents/plugins/marketplace.json`
 - `~/.codex/agents/*.toml`
 - `~/.codex/config.toml`
@@ -159,7 +165,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.0
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.1
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.

@@ -135,11 +135,29 @@ async function checkInstallUninstallSimulation() {
   const marketplace = JSON.parse(await fs.readFile(path.join(tmp, ".agents", "plugins", "marketplace.json"), "utf8"));
   const entries = marketplace.plugins.filter((plugin) => plugin.name === "meta-flow");
   if (entries.length !== 1) errors.push(`marketplace has ${entries.length} meta-flow entries`);
+  if (!(await exists(path.join(tmp, ".agents", "skills", "meta-flow", "SKILL.md")))) {
+    errors.push("discoverable skill was not installed");
+  }
+  if (!(await exists(path.join(tmp, ".meta-flow", "scripts", "new_task.py")))) {
+    errors.push("support scripts were not installed");
+  }
+  if (!(await exists(path.join(tmp, ".meta-flow", "templates", "state.json")))) {
+    errors.push("support templates were not installed");
+  }
   const doctorCode = await runDoctor(["--scope", "repo", "--target", tmp]);
   if (doctorCode !== 0) errors.push("doctor returned non-zero after install");
   const uninstallCode = await runUninstall(["--scope", "repo", "--target", tmp, "--yes"]);
   if (uninstallCode !== 0) errors.push("uninstall returned non-zero");
   return result("repo install/doctor/uninstall simulation", errors);
+}
+
+async function exists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function collectJsFiles(dir) {

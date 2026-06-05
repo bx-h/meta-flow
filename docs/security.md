@@ -1,4 +1,4 @@
-> **一句话总结**：Meta Flow's installer is designed to be explicit, local-only, non-telemetry, non-postinstall, and bounded to known Codex plugin and agent paths.
+> **一句话总结**：Meta Flow's installer is designed to be explicit, local-only, non-telemetry, non-postinstall, and bounded to known Codex Skill, plugin, support, and agent paths.
 
 # Security
 
@@ -17,6 +17,9 @@ There is no telemetry, remote code execution, or source upload.
 Repo scope writes only under the selected target path:
 
 - `plugins/meta-flow`
+- `.agents/skills/meta-flow`
+- `.meta-flow/scripts`
+- `.meta-flow/templates`
 - `.agents/plugins/marketplace.json`
 - `.codex/agents`
 - `.codex/config.toml`
@@ -24,18 +27,21 @@ Repo scope writes only under the selected target path:
 User scope writes only under `os.homedir()` equivalents:
 
 - `.codex/plugins/meta-flow`
+- `.agents/skills/meta-flow`
+- `.meta-flow/scripts`
+- `.meta-flow/templates`
 - `.agents/plugins/marketplace.json`
 - `.codex/agents`
 - `.codex/config.toml`
 
-Delete operations are limited to confirmed meta-flow plugin directories and marked meta-flow agent files.
+Delete operations are limited to confirmed meta-flow plugin directories, managed Skill directories, managed support directories, and marked meta-flow agent files. Task data under `.meta-flow/tasks` is kept by default.
 
 ## Supply Chain Risks
 
 Use version pinning for reproducibility:
 
 ```bash
-npx @bx-h/meta-flow@0.1.0 install --scope repo
+npx @bx-h/meta-flow@0.1.1 install --scope repo
 ```
 
 Run dry-run before installing:

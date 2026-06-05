@@ -19,6 +19,9 @@ npx @bx-h/meta-flow@latest install --scope repo --target /path/to/repo
 Repo scope writes:
 
 - `<repo>/plugins/meta-flow`
+- `<repo>/.agents/skills/meta-flow`
+- `<repo>/.meta-flow/scripts`
+- `<repo>/.meta-flow/templates`
 - `<repo>/.agents/plugins/marketplace.json`
 - `<repo>/.codex/agents/*.toml`
 - `<repo>/.codex/config.toml`
@@ -34,6 +37,9 @@ npx @bx-h/meta-flow@latest install --scope user
 User scope writes:
 
 - `~/.codex/plugins/meta-flow`
+- `~/.agents/skills/meta-flow`
+- `~/.meta-flow/scripts`
+- `~/.meta-flow/templates`
 - `~/.agents/plugins/marketplace.json`
 - `~/.codex/agents/*.toml`
 - `~/.codex/config.toml`
@@ -85,6 +91,8 @@ meta-flow uninstall --scope user --yes
 Uninstall removes:
 
 - the managed plugin directory
+- the managed discoverable Skill directory
+- managed support scripts and templates
 - the meta-flow marketplace entry
 - agent TOML files with the meta-flow marker
 

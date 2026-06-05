@@ -4,6 +4,8 @@ import { createLogger } from "../lib/logger.js";
 import { uninstallMarketplace } from "../lib/marketplace.js";
 import { uninstallPlugin } from "../lib/plugin.js";
 import { resolveTargets } from "../lib/paths.js";
+import { uninstallSkill } from "../lib/skill.js";
+import { uninstallSupportFiles } from "../lib/support.js";
 
 export function uninstallHelp() {
   return `Usage: meta-flow uninstall --scope repo|user [options]
@@ -34,6 +36,8 @@ export async function runUninstall(argv = []) {
   console.log(`- scope: ${targets.scope}`);
   console.log(`- target: ${targets.target}`);
   console.log(`- remove plugin: ${targets.pluginTarget}`);
+  console.log(`- remove skill: ${targets.skillTarget}`);
+  console.log(`- remove support scripts/templates: ${targets.supportTarget}`);
   console.log(`- update marketplace: ${targets.marketplaceTarget}`);
   console.log(`- remove marked agents: ${targets.agentsTarget}`);
   console.log(`- keep tasks: ${targets.tasksTarget}`);
@@ -45,6 +49,16 @@ export async function runUninstall(argv = []) {
   const pluginResult = await uninstallPlugin(targets, { dryRun, logger });
   if (pluginResult.skipped) {
     logger.warn(`plugin target is not a confirmed meta-flow plugin; skipped: ${targets.pluginTarget}`);
+  }
+  const skillResult = await uninstallSkill(targets, { dryRun, logger });
+  if (skillResult.skipped) {
+    logger.warn(`skill target has no meta-flow marker; skipped: ${targets.skillTarget}`);
+  }
+  const supportResult = await uninstallSupportFiles(targets, { dryRun, logger });
+  for (const [name, result] of Object.entries(supportResult)) {
+    if (result.skipped) {
+      logger.warn(`${name} target has no meta-flow marker; skipped.`);
+    }
   }
   await uninstallMarketplace(targets, { dryRun, logger });
   const agentResult = await uninstallAgents(targets, { dryRun, logger });

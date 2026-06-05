@@ -5,7 +5,7 @@ import { repoMarketplacePath } from "./paths.js";
 export function marketplaceEntry(targets) {
   return {
     name: "meta-flow",
-    version: "0.1.0",
+    version: "0.1.1",
     source: {
       source: "local",
       path: targets.scope === "repo" ? repoMarketplacePath() : targets.pluginTarget

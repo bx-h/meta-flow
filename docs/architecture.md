@@ -1,4 +1,4 @@
-> **一句话总结**：Meta Flow uses a Codex Plugin for workflow assets and an npm CLI for safe materialization of plugin files, marketplace entries, custom agents, and validation tools.
+> **一句话总结**：Meta Flow uses a Codex Plugin for workflow assets and an npm CLI for safe materialization of discoverable Skills, marketplace entries, custom agents, and validation tools.
 
 # Architecture
 
@@ -15,12 +15,13 @@ This split keeps runtime workflow assets separate from installation mechanics:
 
 ## Why Agent Templates Need Installation
 
-Codex custom agents are loaded from:
+Codex Skills and custom agents are loaded from:
 
-- user scope: `~/.codex/agents/`
-- repo scope: `.codex/agents/`
+- skills: `.agents/skills/meta-flow/`
+- user agents: `~/.codex/agents/`
+- repo agents: `.codex/agents/`
 
-The plugin manifest does not automatically materialize these TOML files. The installer copies `plugin/agent-templates/*.toml` into the target agent directory and adds a marker so uninstall can safely remove only files it owns.
+The plugin manifest does not automatically materialize these files for `$meta-flow` and custom-agent discovery. The installer copies `plugin/skills/meta-flow/` into the target `.agents/skills/` directory, copies `plugin/agent-templates/*.toml` into the target agent directory, and adds markers so uninstall can safely remove only files it owns.
 
 ## Plugin Asset Roles
 
@@ -30,13 +31,15 @@ The plugin manifest does not automatically materialize these TOML files. The ins
 - `plugin/scripts/`: standard-library Python helpers for new tasks, validation, aggregation, and status.
 - `plugin/agent-templates/`: source TOML for custom agents.
 
+During install, runtime support files are also copied to `.meta-flow/scripts` and `.meta-flow/templates` so the discoverable Skill can call local validation helpers.
+
 ## Repo Scope Versus User Scope
 
 Repo scope is for one project. It writes to the selected repository and makes the workflow available there.
 
 User scope is for the current user. It writes under the user's home directory and makes the workflow available broadly.
 
-Both scopes install custom agents and ensure Codex `[agents]` configuration exists. Existing `max_threads` and `max_depth` values are not overwritten unless `--force` is used.
+Both scopes install the discoverable Skill, support scripts/templates, custom agents, and ensure Codex `[agents]` configuration exists. Existing `max_threads` and `max_depth` values are not overwritten unless `--force` is used.
 
 ## Safety Model
 
@@ -46,6 +49,6 @@ The installer:
 
 - checks paths before deletion
 - merges marketplace JSON without dropping other entries
-- refuses to overwrite unmanaged agent files without `--force`
+- refuses to overwrite unmanaged skill, support, plugin, or agent files without `--force`
 - backs up overwritten files when requested or forced
 - keeps task data on uninstall

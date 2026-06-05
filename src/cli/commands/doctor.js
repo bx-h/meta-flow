@@ -7,6 +7,8 @@ import { inspectCodexConfig } from "../lib/codex_config.js";
 import { pathExists, readJsonOrDefault } from "../lib/fs_safe.js";
 import { createLogger } from "../lib/logger.js";
 import { resolveTargets, sampleTaskRoot } from "../lib/paths.js";
+import { validateInstalledSkill } from "../lib/skill.js";
+import { validateSupportFiles } from "../lib/support.js";
 
 export function doctorHelp() {
   return `Usage: meta-flow doctor --scope repo|user [--target <path>] [--verbose]`;
@@ -27,6 +29,8 @@ export async function runDoctor(argv = []) {
 
   results.push(checkCodexCli());
   results.push(await checkPlugin(targets));
+  results.push(await checkDiscoverableSkill(targets));
+  results.push(await checkSupportFiles(targets));
   results.push(await checkMarketplace(targets));
   results.push(await checkAgents(targets));
   results.push(await checkConfig(targets));
@@ -66,6 +70,22 @@ async function checkPlugin(targets) {
     return { level: "FAIL", title: "SKILL.md frontmatter invalid", message: "Reinstall plugin files." };
   }
   return { level: "PASS", title: "plugin and skill present" };
+}
+
+async function checkDiscoverableSkill(targets) {
+  const result = await validateInstalledSkill(targets);
+  if (result.errors.length) {
+    return { level: "FAIL", title: "discoverable skill incomplete", message: result.errors.join("; ") };
+  }
+  return { level: "PASS", title: "discoverable skill present" };
+}
+
+async function checkSupportFiles(targets) {
+  const result = await validateSupportFiles(targets);
+  if (result.errors.length) {
+    return { level: "FAIL", title: "support scripts/templates incomplete", message: result.errors.join("; ") };
+  }
+  return { level: "PASS", title: "support scripts/templates present" };
 }
 
 async function checkMarketplace(targets) {
@@ -118,7 +138,7 @@ async function checkConfig(targets) {
 }
 
 async function checkPythonScripts(targets) {
-  const scriptsDir = path.join(targets.pluginTarget, "scripts");
+  const scriptsDir = targets.scriptsTarget;
   const scriptPath = path.join(scriptsDir, "validate_goal_contract.py");
   if (!(await pathExists(scriptPath))) {
     return { level: "FAIL", title: "Python scripts missing", message: "Reinstall plugin files." };
@@ -135,7 +155,7 @@ async function checkSampleTask(targets) {
     return { level: "WARN", title: "sample task unavailable", message: "Package examples are not present." };
   }
   const python = resolvePython();
-  const scripts = path.join(targets.pluginTarget, "scripts");
+  const scripts = targets.scriptsTarget;
   const runs = [
     [path.join(scripts, "validate_goal_contract.py"), path.join(sampleTaskRoot, "goal-contract.json")],
     [path.join(scripts, "validate_adjudication.py"), path.join(sampleTaskRoot, "adjudication-report.json")],

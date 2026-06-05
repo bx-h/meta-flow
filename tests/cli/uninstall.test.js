@@ -15,6 +15,9 @@ test("uninstall removes managed plugin and agents but keeps task data", async ()
   await runUninstall(["--scope", "repo", "--target", target, "--yes"]);
 
   assert.equal(await exists(path.join(target, "plugins", "meta-flow")), false);
+  assert.equal(await exists(path.join(target, ".agents", "skills", "meta-flow")), false);
+  assert.equal(await exists(path.join(target, ".meta-flow", "scripts")), false);
+  assert.equal(await exists(path.join(target, ".meta-flow", "templates")), false);
   assert.equal(await exists(path.join(target, ".codex", "agents", "questioner.toml")), false);
   assert.equal(await exists(path.join(target, ".meta-flow", "tasks", "T", "state.json")), true);
 });
