@@ -3,6 +3,39 @@ import { hasManagedMarker, installManagedDir, uninstallManagedDir } from "./mana
 import { pathExists } from "./fs_safe.js";
 import { scriptsSource, templatesSource } from "./paths.js";
 
+export const REQUIRED_SCRIPT_FILES = [
+  "_common.py",
+  "aggregate_reviews.py",
+  "new_task.py",
+  "status.py",
+  "validate_adjudication.py",
+  "validate_goal_contract.py",
+  "validate_milestone_plan.py",
+  "validate_task_list.py",
+  "validate_task_verification.py"
+];
+
+export const HELP_SCRIPT_FILES = REQUIRED_SCRIPT_FILES.filter((fileName) => fileName !== "_common.py");
+
+export const REQUIRED_TEMPLATE_FILES = [
+  "adjudication-report.json",
+  "direction-evaluation.json",
+  "final-report.md",
+  "goal-contract.json",
+  "milestone-plan.json",
+  "proposal-summary.md",
+  "proposal.md",
+  "questioning-report.json",
+  "raw-request.md",
+  "review-aggregate.json",
+  "reviewer-report.json",
+  "state.json",
+  "task-execution-report.json",
+  "task-list.json",
+  "task-spec.json",
+  "task-verification-report.json"
+];
+
 export async function installSupportFiles(targets, options = {}) {
   const scripts = await installManagedDir(scriptsSource, targets.scriptsTarget, options);
   const templates = await installManagedDir(templatesSource, targets.templatesTarget, options);
@@ -16,14 +49,15 @@ export async function uninstallSupportFiles(targets, options = {}) {
 }
 
 export async function validateSupportFiles(targets) {
-  const required = [
-    path.join(targets.scriptsTarget, "new_task.py"),
-    path.join(targets.scriptsTarget, "validate_goal_contract.py"),
-    path.join(targets.templatesTarget, "state.json"),
-    path.join(targets.templatesTarget, "goal-contract.json")
-  ];
   const errors = [];
-  for (const filePath of required) {
+  for (const fileName of REQUIRED_SCRIPT_FILES) {
+    const filePath = path.join(targets.scriptsTarget, fileName);
+    if (!(await pathExists(filePath))) {
+      errors.push(`missing ${filePath}`);
+    }
+  }
+  for (const fileName of REQUIRED_TEMPLATE_FILES) {
+    const filePath = path.join(targets.templatesTarget, fileName);
     if (!(await pathExists(filePath))) {
       errors.push(`missing ${filePath}`);
     }

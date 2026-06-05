@@ -6,9 +6,10 @@
   "plugins": [
     {
       "name": "meta-flow",
+      "version": "0.1.2",
       "source": {
         "source": "local",
-        "path": "./plugins/meta-flow"
+        "path": "./plugin"
       },
       "policy": {
         "installation": "AVAILABLE",

@@ -9,6 +9,8 @@ import { runInstall } from "./install.js";
 import { runUninstall } from "./uninstall.js";
 import { validatePlugin } from "../lib/plugin.js";
 import { packageRoot, pluginSource, sampleTaskRoot } from "../lib/paths.js";
+import { HELP_SCRIPT_FILES } from "../lib/support.js";
+import { META_FLOW_VERSION, PACKAGE_NAME } from "../lib/version.js";
 
 export async function runVerify(argv = []) {
   const lintOnly = argv.includes("--lint-only");
@@ -22,6 +24,7 @@ export async function runVerify(argv = []) {
   checks.push(await checkPlugin());
   checks.push(await checkAgents());
   checks.push(await checkPythonHelp());
+  checks.push(await checkTemplates());
   checks.push(await checkSampleTask());
   checks.push(await checkDryRun());
   checks.push(await checkInstallUninstallSimulation());
@@ -32,7 +35,8 @@ export async function runVerify(argv = []) {
 async function checkPackageJson() {
   const packageJson = JSON.parse(await fs.readFile(path.join(packageRoot, "package.json"), "utf8"));
   const errors = [];
-  if (packageJson.name !== "@bx-h/meta-flow") errors.push("unexpected package name");
+  if (packageJson.name !== PACKAGE_NAME) errors.push("unexpected package name");
+  if (packageJson.version !== META_FLOW_VERSION) errors.push(`unexpected package version: ${packageJson.version}`);
   if (packageJson.scripts?.postinstall) errors.push("postinstall must not exist");
   if (packageJson.bin?.["meta-flow"] !== "bin/meta-flow.js") errors.push("bin meta-flow is invalid");
   if (packageJson.type !== "module") errors.push("type must be module");
@@ -65,25 +69,36 @@ async function checkAgents() {
 }
 
 async function checkPythonHelp() {
-  const scripts = [
-    "new_task.py",
-    "validate_goal_contract.py",
-    "aggregate_reviews.py",
-    "validate_adjudication.py",
-    "validate_milestone_plan.py",
-    "validate_task_list.py",
-    "validate_task_verification.py",
-    "status.py"
-  ];
   const python = resolvePython();
   const errors = [];
-  for (const script of scripts) {
+  for (const script of HELP_SCRIPT_FILES) {
     const run = spawnSync(python, [path.join(pluginSource, "scripts", script), "--help"], pythonOptions());
     if (run.status !== 0) {
       errors.push(`${script} --help failed: ${run.stderr || run.stdout}`);
     }
   }
   return result("Python script --help", errors);
+}
+
+async function checkTemplates() {
+  const python = resolvePython();
+  const scripts = path.join(pluginSource, "scripts");
+  const templates = path.join(pluginSource, "templates");
+  const runs = [
+    [path.join(scripts, "validate_goal_contract.py"), path.join(templates, "goal-contract.json")],
+    [path.join(scripts, "validate_adjudication.py"), path.join(templates, "adjudication-report.json")],
+    [path.join(scripts, "validate_milestone_plan.py"), path.join(templates, "milestone-plan.json")],
+    [path.join(scripts, "validate_task_list.py"), path.join(templates, "task-list.json")],
+    [path.join(scripts, "validate_task_verification.py"), path.join(templates, "task-verification-report.json")]
+  ];
+  const errors = [];
+  for (const args of runs) {
+    const run = spawnSync(python, args, pythonOptions());
+    if (run.status !== 0) {
+      errors.push(`${path.basename(args[1])} failed: ${run.stderr || run.stdout}`);
+    }
+  }
+  return result("templates validate against scripts", errors);
 }
 
 async function checkSampleTask() {

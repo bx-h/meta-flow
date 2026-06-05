@@ -4,10 +4,16 @@
     {
       "id": "M1",
       "objective": "string",
-      "scope": [],
+      "scope": [
+        "string"
+      ],
       "out_of_scope": [],
-      "acceptance_checks": [],
-      "expected_outputs": [],
+      "acceptance_checks": [
+        "string"
+      ],
+      "expected_outputs": [
+        "string"
+      ],
       "risk": "medium",
       "status": "pending"
     }

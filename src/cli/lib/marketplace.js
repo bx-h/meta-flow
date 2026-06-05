@@ -1,11 +1,12 @@
 import path from "node:path";
-import { readJsonOrDefault, writeJsonPretty } from "./fs_safe.js";
+import { pathExists, readJsonOrDefault, writeJsonPretty } from "./fs_safe.js";
 import { repoMarketplacePath } from "./paths.js";
+import { META_FLOW_VERSION } from "./version.js";
 
 export function marketplaceEntry(targets) {
   return {
     name: "meta-flow",
-    version: "0.1.1",
+    version: META_FLOW_VERSION,
     source: {
       source: "local",
       path: targets.scope === "repo" ? repoMarketplacePath() : targets.pluginTarget
@@ -58,6 +59,9 @@ export async function updateMarketplace(targets, options = {}) {
 }
 
 export async function uninstallMarketplace(targets, options = {}) {
+  if (!(await pathExists(targets.marketplaceTarget))) {
+    return { updated: false, skipped: true };
+  }
   const current = await readJsonOrDefault(targets.marketplaceTarget, {
     name: "meta-flow-marketplace",
     interface: { displayName: "Meta Flow Marketplace" },
@@ -65,6 +69,7 @@ export async function uninstallMarketplace(targets, options = {}) {
   });
   const next = removeMarketplaceEntry(current);
   await writeJsonPretty(targets.marketplaceTarget, next, options);
+  return { updated: true, skipped: false };
 }
 
 export function describeMarketplace(targets) {

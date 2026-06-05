@@ -6,9 +6,11 @@ import { AGENT_FILES, validateAgentTemplate } from "../lib/agents.js";
 import { inspectCodexConfig } from "../lib/codex_config.js";
 import { pathExists, readJsonOrDefault } from "../lib/fs_safe.js";
 import { createLogger } from "../lib/logger.js";
+import { marketplaceEntry } from "../lib/marketplace.js";
 import { resolveTargets, sampleTaskRoot } from "../lib/paths.js";
 import { validateInstalledSkill } from "../lib/skill.js";
-import { validateSupportFiles } from "../lib/support.js";
+import { HELP_SCRIPT_FILES, validateSupportFiles } from "../lib/support.js";
+import { META_FLOW_VERSION } from "../lib/version.js";
 
 export function doctorHelp() {
   return `Usage: meta-flow doctor --scope repo|user [--target <path>] [--verbose]`;
@@ -35,6 +37,7 @@ export async function runDoctor(argv = []) {
   results.push(await checkAgents(targets));
   results.push(await checkConfig(targets));
   results.push(await checkPythonScripts(targets));
+  results.push(await checkInstalledTemplates(targets));
   results.push(await checkSampleTask(targets));
 
   for (const result of results) {
@@ -61,6 +64,9 @@ async function checkPlugin(targets) {
   const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
   if (manifest.name !== "meta-flow") {
     return { level: "FAIL", title: "plugin manifest invalid", message: "Expected name=meta-flow." };
+  }
+  if (manifest.version !== META_FLOW_VERSION) {
+    return { level: "FAIL", title: "plugin manifest version mismatch", message: `Expected version=${META_FLOW_VERSION}.` };
   }
   if (!(await pathExists(skillPath))) {
     return { level: "FAIL", title: "SKILL.md missing", message: "Re-run install." };
@@ -99,7 +105,33 @@ async function checkMarketplace(targets) {
   if (!entry) {
     return { level: "FAIL", title: "marketplace entry missing", message: "Run install to add meta-flow entry." };
   }
+  const expected = marketplaceEntry(targets);
+  const errors = [];
+  if (entry.version !== expected.version) {
+    errors.push(`version expected ${expected.version}, got ${entry.version ?? "missing"}`);
+  }
+  if (entry.source?.source !== expected.source.source) {
+    errors.push(`source.source expected ${expected.source.source}`);
+  }
+  if (entry.source?.path !== expected.source.path) {
+    errors.push(`source.path expected ${expected.source.path}, got ${entry.source?.path ?? "missing"}`);
+  }
+  const pluginPath = resolveMarketplacePluginPath(targets, entry);
+  if (!pluginPath || !(await pathExists(path.join(pluginPath, ".codex-plugin", "plugin.json")))) {
+    errors.push("source.path does not point to an installed plugin manifest");
+  }
+  if (errors.length) {
+    return { level: "FAIL", title: "marketplace entry invalid", message: errors.join("; ") };
+  }
   return { level: "PASS", title: "marketplace entry present" };
+}
+
+function resolveMarketplacePluginPath(targets, entry) {
+  const sourcePath = entry?.source?.path;
+  if (!sourcePath || typeof sourcePath !== "string") {
+    return null;
+  }
+  return path.isAbsolute(sourcePath) ? sourcePath : path.resolve(targets.target, sourcePath);
 }
 
 async function checkAgents(targets) {
@@ -139,15 +171,38 @@ async function checkConfig(targets) {
 
 async function checkPythonScripts(targets) {
   const scriptsDir = targets.scriptsTarget;
-  const scriptPath = path.join(scriptsDir, "validate_goal_contract.py");
-  if (!(await pathExists(scriptPath))) {
-    return { level: "FAIL", title: "Python scripts missing", message: "Reinstall plugin files." };
-  }
-  const result = spawnSync(resolvePython(), [scriptPath, "--help"], pythonOptions());
-  if (result.status !== 0) {
-    return { level: "FAIL", title: "Python scripts not runnable", message: result.stderr || result.stdout };
+  const python = resolvePython();
+  for (const fileName of HELP_SCRIPT_FILES) {
+    const scriptPath = path.join(scriptsDir, fileName);
+    if (!(await pathExists(scriptPath))) {
+      return { level: "FAIL", title: "Python scripts missing", message: `Missing ${scriptPath}` };
+    }
+    const result = spawnSync(python, [scriptPath, "--help"], pythonOptions());
+    if (result.status !== 0) {
+      return { level: "FAIL", title: "Python scripts not runnable", message: `${fileName}: ${result.stderr || result.stdout}` };
+    }
   }
   return { level: "PASS", title: "Python scripts runnable" };
+}
+
+async function checkInstalledTemplates(targets) {
+  const python = resolvePython();
+  const scripts = targets.scriptsTarget;
+  const templates = targets.templatesTarget;
+  const runs = [
+    [path.join(scripts, "validate_goal_contract.py"), path.join(templates, "goal-contract.json")],
+    [path.join(scripts, "validate_adjudication.py"), path.join(templates, "adjudication-report.json")],
+    [path.join(scripts, "validate_milestone_plan.py"), path.join(templates, "milestone-plan.json")],
+    [path.join(scripts, "validate_task_list.py"), path.join(templates, "task-list.json")],
+    [path.join(scripts, "validate_task_verification.py"), path.join(templates, "task-verification-report.json")]
+  ];
+  for (const args of runs) {
+    const result = spawnSync(python, args, pythonOptions());
+    if (result.status !== 0) {
+      return { level: "FAIL", title: "installed templates invalid", message: result.stderr || result.stdout };
+    }
+  }
+  return { level: "PASS", title: "installed templates valid" };
 }
 
 async function checkSampleTask(targets) {

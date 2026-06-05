@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2
+
+- Make installed JSON templates pass their matching validation scripts.
+- Add template validation to `verify` and `doctor`.
+- Propagate command return codes through the CLI entrypoint.
+- Tighten `doctor` checks for marketplace, plugin version, support scripts, and CLI-visible failures.
+- Make the release workflow skip npm publish when the tag version already exists.
+
 ## 0.1.1
 
 - Install `meta-flow` into `.agents/skills/meta-flow` so `$meta-flow` can be discovered directly.

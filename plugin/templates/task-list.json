@@ -6,11 +6,17 @@
       "id": "T1",
       "objective": "string",
       "inputs": [],
-      "expected_outputs": [],
-      "allowed_files": [],
+      "expected_outputs": [
+        "string"
+      ],
+      "allowed_files": [
+        "path-or-glob"
+      ],
       "forbidden_files": [],
       "allowed_commands": [],
-      "acceptance_checks": [],
+      "acceptance_checks": [
+        "string"
+      ],
       "dependencies": [],
       "risk": "medium",
       "repair_attempts": 0,

@@ -23,12 +23,30 @@ jobs:
         with:
           python-version: "3.x"
       - run: npm ci
+      - name: Check tag matches package version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$TAG_VERSION" != "$VERSION" ]; then
+            echo "Tag version $TAG_VERSION does not match package.json version $VERSION" >&2
+            exit 1
+          fi
       - run: npm test
       - run: npm run verify
       - run: npm pack
       - name: Generate checksum
         run: shasum -a 256 *.tgz > SHA256SUMS
+      - name: Check npm package version
+        id: npm_version
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@bx-h/meta-flow@$VERSION" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish npm package
+        if: steps.npm_version.outputs.exists != 'true'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -47,7 +47,7 @@ User scope writes:
 Prefer version pinning:
 
 ```bash
-npx @bx-h/meta-flow@0.1.1 install --scope repo
+npx @bx-h/meta-flow@0.1.2 install --scope repo
 ```
 
 Preview writes:

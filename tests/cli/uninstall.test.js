@@ -28,6 +28,12 @@ test("uninstall refuses deletion without yes or dry-run", async () => {
   await assert.rejects(() => runUninstall(["--scope", "repo", "--target", target]), /--yes/);
 });
 
+test("uninstall on empty target does not create marketplace", async () => {
+  const target = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-empty-uninstall-test-"));
+  await runUninstall(["--scope", "repo", "--target", target, "--yes"]);
+  assert.equal(await exists(path.join(target, ".agents", "plugins", "marketplace.json")), false);
+});
+
 async function exists(filePath) {
   try {
     await fs.access(filePath);

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { backupIfExists, copyDirSafe, pathExists, removeDirSafe } from "./fs_safe.js";
 import { pluginSource } from "./paths.js";
+import { META_FLOW_VERSION } from "./version.js";
 
 async function isMetaFlowPlugin(dir) {
   try {
@@ -47,8 +48,8 @@ export async function validatePlugin(root = pluginSource) {
   if (manifest.name !== "meta-flow") {
     errors.push("plugin manifest name must be meta-flow");
   }
-  if (manifest.version !== "0.1.1") {
-    errors.push("plugin manifest version must be 0.1.1");
+  if (manifest.version !== META_FLOW_VERSION) {
+    errors.push(`plugin manifest version must be ${META_FLOW_VERSION}`);
   }
   if (!/^---\n[\s\S]*?name:\s*meta-flow[\s\S]*?---/m.test(skill)) {
     errors.push("SKILL.md frontmatter must contain name: meta-flow");
