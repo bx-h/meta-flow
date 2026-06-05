@@ -1,0 +1,13 @@
+{
+  "task_id": "__TASK_ID__",
+  "milestone_id": "M1",
+  "concrete_task_id": "T1",
+  "decision": "pass",
+  "checks_run": [],
+  "passed_checks": [],
+  "failed_checks": [],
+  "evidence_refs": [],
+  "minimal_repair_instructions": "",
+  "new_findings": [],
+  "should_trigger_direction_evaluation": false
+}

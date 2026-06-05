@@ -1,0 +1,41 @@
+{
+  "task_id": "sample-health-check",
+  "milestone_id": "M1",
+  "tasks": [
+    {
+      "id": "T1",
+      "objective": "Implement GET /healthz, add a focused route test, and document shallow liveness behavior.",
+      "inputs": [
+        "goal-contract.json",
+        "proposal.md",
+        "milestone-plan.json"
+      ],
+      "expected_outputs": [
+        "A route handler returning HTTP 200 and status=ok.",
+        "A passing route test.",
+        "Documentation for endpoint path, response, and non-goals."
+      ],
+      "allowed_files": [
+        "src/routes/health.py",
+        "tests/test_health.py",
+        "docs/api.md"
+      ],
+      "forbidden_files": [
+        "deployment/**",
+        "requirements.txt"
+      ],
+      "allowed_commands": [
+        "pytest tests/test_health.py"
+      ],
+      "acceptance_checks": [
+        "pytest tests/test_health.py passes.",
+        "docs/api.md mentions GET /healthz and shallow liveness.",
+        "requirements.txt is unchanged."
+      ],
+      "dependencies": [],
+      "risk": "medium",
+      "repair_attempts": 0,
+      "status": "passed"
+    }
+  ]
+}

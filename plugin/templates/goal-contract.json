@@ -1,0 +1,20 @@
+{
+  "task_id": "__TASK_ID__",
+  "raw_user_request": "string",
+  "refined_goal": "string",
+  "problem_boundary": "string",
+  "non_goals": [],
+  "assumptions": [],
+  "constraints": [],
+  "success_definition": "string",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "criterion": "string",
+      "verification_method": "manual",
+      "evidence_required": "string"
+    }
+  ],
+  "risk_level": "medium",
+  "requires_user_confirmation": true
+}

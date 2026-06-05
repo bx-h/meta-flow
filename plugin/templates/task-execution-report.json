@@ -1,0 +1,13 @@
+{
+  "task_id": "__TASK_ID__",
+  "milestone_id": "M1",
+  "concrete_task_id": "T1",
+  "status": "done",
+  "summary": "string",
+  "changed_files": [],
+  "commands_run": [],
+  "evidence": [],
+  "discovered_facts": [],
+  "risk_flags": [],
+  "notes_for_verifier": "string"
+}

@@ -1,0 +1,31 @@
+{
+  "task_id": "sample-health-check",
+  "raw_user_request": "为一个后端项目增加健康检查接口，并确保它有测试和文档。",
+  "known_information": [
+    "The user wants a backend health check endpoint.",
+    "Tests and documentation are required outputs."
+  ],
+  "missing_information": [
+    "Backend framework is not specified.",
+    "Exact endpoint path is not specified.",
+    "Health check depth is not specified."
+  ],
+  "clarifying_questions": [
+    {
+      "question": "Should the endpoint be shallow liveness only, or include dependency checks?",
+      "why_it_matters": "Dependency checks can turn transient database or cache issues into deployment failures.",
+      "blocking": false
+    },
+    {
+      "question": "Is there an existing route convention for health endpoints?",
+      "why_it_matters": "Following local route naming prevents compatibility drift.",
+      "blocking": false
+    }
+  ],
+  "assumptions_if_user_does_not_answer": [
+    "Use GET /healthz as a shallow liveness endpoint.",
+    "Return HTTP 200 with a small JSON body.",
+    "Do not add database, cache, or third-party dependency probes in this first pass."
+  ],
+  "can_continue_without_user_answer": true
+}

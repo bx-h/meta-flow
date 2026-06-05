@@ -1,0 +1,15 @@
+{
+  "task_id": "__TASK_ID__",
+  "raw_user_request": "string",
+  "known_information": [],
+  "missing_information": [],
+  "clarifying_questions": [
+    {
+      "question": "string",
+      "why_it_matters": "string",
+      "blocking": true
+    }
+  ],
+  "assumptions_if_user_does_not_answer": [],
+  "can_continue_without_user_answer": false
+}

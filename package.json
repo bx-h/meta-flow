@@ -1,0 +1,50 @@
+{
+  "name": "@bx-h/meta-flow",
+  "version": "0.1.0",
+  "description": "A Codex-native workflow for clarified goals, reviewed proposals, adjudicated plans, task-level execution, verification, and direction-aware iteration.",
+  "type": "module",
+  "bin": {
+    "meta-flow": "./bin/meta-flow.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "plugin/",
+    "marketplace/",
+    "examples/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "lint:js": "node src/cli/commands/verify.js --lint-only",
+    "lint": "npm run lint:js",
+    "pack:dry-run": "npm pack --dry-run",
+    "verify": "node bin/meta-flow.js verify"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "codex",
+    "agent",
+    "workflow",
+    "multi-agent",
+    "skill",
+    "meta-flow"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "huangbaixi",
+    "url": "https://github.com/bx-h/meta-flow"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bx-h/meta-flow.git"
+  },
+  "homepage": "https://github.com/bx-h/meta-flow",
+  "bugs": {
+    "url": "https://github.com/bx-h/meta-flow/issues"
+  }
+}

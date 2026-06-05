@@ -1,0 +1,11 @@
+{
+  "task_id": "__TASK_ID__",
+  "source": "reviewers",
+  "decision": "revise_proposal",
+  "rationale": "string",
+  "resolved_conflicts": [],
+  "deduplicated_issues": [],
+  "instructions_for_next_agent": "string",
+  "next_phase": "PROPOSAL_REWORK",
+  "requires_user_confirmation": false
+}

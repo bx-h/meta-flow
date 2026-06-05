@@ -1,0 +1,14 @@
+{
+  "task_id": "sample-health-check",
+  "source": "reviewers",
+  "decision": "accept",
+  "rationale": "All reviewers passed. Suggested changes are compatible and can be carried into implementation constraints.",
+  "resolved_conflicts": [],
+  "deduplicated_issues": [
+    "Keep the endpoint shallow and document that boundary.",
+    "Use existing tests and dependencies."
+  ],
+  "instructions_for_next_agent": "Summarize the accepted proposal for user confirmation, preserving shallow health-check scope and validation expectations.",
+  "next_phase": "PROPOSAL_SUMMARY",
+  "requires_user_confirmation": false
+}

@@ -1,0 +1,34 @@
+{
+  "task_id": "sample-health-check",
+  "overall_mechanical_result": "pass",
+  "reviewers": [
+    {
+      "reviewer": "product_reviewer",
+      "decision": "pass",
+      "confidence": 0.86
+    },
+    {
+      "reviewer": "risk_reviewer",
+      "decision": "pass",
+      "confidence": 0.8
+    },
+    {
+      "reviewer": "technical_reviewer",
+      "decision": "pass",
+      "confidence": 0.82
+    },
+    {
+      "reviewer": "verification_reviewer",
+      "decision": "pass",
+      "confidence": 0.88
+    }
+  ],
+  "all_blocking_issues": [],
+  "all_suggested_changes": [
+    "Make the shallow versus deep health check boundary explicit in documentation.",
+    "Do not include database/cache checks without a separate readiness design.",
+    "Use existing route test utilities rather than adding a new testing dependency.",
+    "Record the exact test command in task-execution-report.json."
+  ],
+  "all_missing_information": []
+}

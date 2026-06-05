@@ -1,0 +1,15 @@
+{
+  "task_id": "__TASK_ID__",
+  "milestones": [
+    {
+      "id": "M1",
+      "objective": "string",
+      "scope": [],
+      "out_of_scope": [],
+      "acceptance_checks": [],
+      "expected_outputs": [],
+      "risk": "medium",
+      "status": "pending"
+    }
+  ]
+}

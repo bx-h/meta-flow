@@ -1,0 +1,15 @@
+{
+  "task_id": "sample-health-check",
+  "reviewer": "verification_reviewer",
+  "decision": "pass",
+  "confidence": 0.88,
+  "summary": "The acceptance criteria are observable through route tests and documentation review.",
+  "blocking_issues": [],
+  "suggested_changes": [
+    "Record the exact test command in task-execution-report.json."
+  ],
+  "missing_information": [],
+  "evidence_refs": [
+    "goal-contract.json#acceptance_criteria"
+  ]
+}

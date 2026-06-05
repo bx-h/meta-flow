@@ -1,0 +1,16 @@
+{
+  "name": "existing-marketplace",
+  "interface": {
+    "displayName": "Existing Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "other-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/other-plugin"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

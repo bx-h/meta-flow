@@ -1,0 +1,16 @@
+{
+  "task_id": "sample-health-check",
+  "reviewer": "product_reviewer",
+  "decision": "pass",
+  "confidence": 0.86,
+  "summary": "The proposal addresses the user's request and keeps the initial scope clear.",
+  "blocking_issues": [],
+  "suggested_changes": [
+    "Make the shallow versus deep health check boundary explicit in documentation."
+  ],
+  "missing_information": [],
+  "evidence_refs": [
+    "goal-contract.json#refined_goal",
+    "proposal.md#Recommended Approach"
+  ]
+}

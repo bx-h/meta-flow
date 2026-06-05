@@ -1,0 +1,44 @@
+{
+  "task_id": "sample-health-check",
+  "raw_user_request": "为一个后端项目增加健康检查接口，并确保它有测试和文档。",
+  "refined_goal": "Add a shallow backend health check endpoint with tests and documentation.",
+  "problem_boundary": "Implement one liveness endpoint in the backend service, verify the endpoint response, and document its purpose and response contract.",
+  "non_goals": [
+    "Do not add deep dependency probes for databases, caches, queues, or third-party services.",
+    "Do not change deployment, load balancer, or monitoring configuration.",
+    "Do not refactor unrelated routing code."
+  ],
+  "assumptions": [
+    "The backend already has a route registration pattern.",
+    "GET /healthz is acceptable unless a local convention says otherwise.",
+    "A shallow liveness check is safer for a first implementation."
+  ],
+  "constraints": [
+    "Use existing backend framework and test runner.",
+    "Keep the endpoint side-effect free.",
+    "Do not introduce new runtime dependencies."
+  ],
+  "success_definition": "A caller can request the health endpoint and receive a deterministic success response; tests and documentation describe the behavior.",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "criterion": "GET /healthz returns HTTP 200 with a JSON body containing status=ok.",
+      "verification_method": "test",
+      "evidence_required": "Passing route test output."
+    },
+    {
+      "id": "AC2",
+      "criterion": "Endpoint behavior and non-goals are documented.",
+      "verification_method": "review",
+      "evidence_required": "Docs diff includes endpoint path, response, and shallow-check limitation."
+    },
+    {
+      "id": "AC3",
+      "criterion": "No new runtime dependency is added.",
+      "verification_method": "review",
+      "evidence_required": "Dependency manifest diff is empty or unchanged."
+    }
+  ],
+  "risk_level": "medium",
+  "requires_user_confirmation": true
+}

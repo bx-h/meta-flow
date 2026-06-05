@@ -1,0 +1,10 @@
+tests/
+tmp/
+coverage/
+.git/
+.github/
+*.tgz
+.DS_Store
+node_modules/
+**/__pycache__/
+**/*.pyc

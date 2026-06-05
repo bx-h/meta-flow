@@ -1,0 +1,14 @@
+{
+  "task_id": "__TASK_ID__",
+  "overall_mechanical_result": "revise",
+  "reviewers": [
+    {
+      "reviewer": "string",
+      "decision": "revise",
+      "confidence": 0.7
+    }
+  ],
+  "all_blocking_issues": [],
+  "all_suggested_changes": [],
+  "all_missing_information": []
+}

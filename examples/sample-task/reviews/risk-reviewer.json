@@ -1,0 +1,16 @@
+{
+  "task_id": "sample-health-check",
+  "reviewer": "risk_reviewer",
+  "decision": "pass",
+  "confidence": 0.8,
+  "summary": "The shallow endpoint avoids coupling health to dependencies and has low operational risk.",
+  "blocking_issues": [],
+  "suggested_changes": [
+    "Do not include database/cache checks without a separate readiness design."
+  ],
+  "missing_information": [],
+  "evidence_refs": [
+    "goal-contract.json#non_goals",
+    "proposal.md#Risks"
+  ]
+}

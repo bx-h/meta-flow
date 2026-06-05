@@ -1,0 +1,10 @@
+{
+  "reviewer": "string",
+  "decision": "revise",
+  "confidence": 0.7,
+  "summary": "string",
+  "blocking_issues": [],
+  "suggested_changes": [],
+  "missing_information": [],
+  "evidence_refs": []
+}

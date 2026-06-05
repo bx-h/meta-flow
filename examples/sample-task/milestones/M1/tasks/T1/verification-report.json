@@ -1,0 +1,23 @@
+{
+  "task_id": "sample-health-check",
+  "milestone_id": "M1",
+  "concrete_task_id": "T1",
+  "decision": "pass",
+  "checks_run": [
+    "pytest tests/test_health.py",
+    "documentation review",
+    "dependency diff review"
+  ],
+  "passed_checks": [
+    "Route test passed.",
+    "Documentation states GET /healthz response and shallow liveness scope.",
+    "No dependency manifest change."
+  ],
+  "failed_checks": [],
+  "evidence_refs": [
+    "execution-report.json#evidence"
+  ],
+  "minimal_repair_instructions": "",
+  "new_findings": [],
+  "should_trigger_direction_evaluation": false
+}

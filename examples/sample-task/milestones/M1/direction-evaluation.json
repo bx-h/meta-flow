@@ -1,0 +1,16 @@
+{
+  "task_id": "sample-health-check",
+  "milestone_id": "M1",
+  "decision": "continue",
+  "summary": "The milestone satisfied the original goal without invalidating proposal assumptions.",
+  "new_findings": [],
+  "invalidated_assumptions": [],
+  "goal_drift_detected": false,
+  "proposal_patch_needed": false,
+  "contract_patch": {
+    "proposed_changes": [],
+    "reason": "No goal change required.",
+    "requires_user_confirmation": false
+  },
+  "next_phase": "FINAL_SUMMARY"
+}

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: npm ci
+      - run: npm test
+      - run: npm run verify
+      - run: npm pack --dry-run
+      - name: Install doctor uninstall smoke
+        run: |
+          TMPDIR="$(mktemp -d)"
+          node bin/meta-flow.js install --scope repo --target "$TMPDIR" --yes
+          node bin/meta-flow.js doctor --scope repo --target "$TMPDIR"
+          node bin/meta-flow.js uninstall --scope repo --target "$TMPDIR" --yes

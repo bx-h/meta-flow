@@ -1,0 +1,20 @@
+{
+  "task_id": "__TASK_ID__",
+  "milestone_id": "M1",
+  "tasks": [
+    {
+      "id": "T1",
+      "objective": "string",
+      "inputs": [],
+      "expected_outputs": [],
+      "allowed_files": [],
+      "forbidden_files": [],
+      "allowed_commands": [],
+      "acceptance_checks": [],
+      "dependencies": [],
+      "risk": "medium",
+      "repair_attempts": 0,
+      "status": "pending"
+    }
+  ]
+}

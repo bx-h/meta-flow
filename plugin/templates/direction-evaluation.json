@@ -1,0 +1,16 @@
+{
+  "task_id": "__TASK_ID__",
+  "milestone_id": "M1",
+  "decision": "continue",
+  "summary": "string",
+  "new_findings": [],
+  "invalidated_assumptions": [],
+  "goal_drift_detected": false,
+  "proposal_patch_needed": false,
+  "contract_patch": {
+    "proposed_changes": [],
+    "reason": "string",
+    "requires_user_confirmation": true
+  },
+  "next_phase": "CONTINUE_NEXT_MILESTONE"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "meta-flow-marketplace",
+  "interface": {
+    "displayName": "Meta Flow Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "meta-flow",
+      "source": {
+        "source": "local",
+        "path": "./plugins/meta-flow"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

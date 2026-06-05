@@ -1,0 +1,35 @@
+{
+  "task_id": "sample-health-check",
+  "phase": "DONE",
+  "created_at": "2026-06-05T00:00:00Z",
+  "updated_at": "2026-06-05T00:30:00Z",
+  "proposal_review_round": 1,
+  "direction_adjustment_round": 0,
+  "current_milestone_id": "M1",
+  "current_task_id": "T1",
+  "max_proposal_rework_rounds": 3,
+  "max_task_repair_rounds": 2,
+  "max_direction_adjustment_rounds": 2,
+  "status": "done",
+  "last_route_decision": "All milestone checks passed; final summary accepted.",
+  "history": [
+    {
+      "at": "2026-06-05T00:00:00Z",
+      "from_phase": "NONE",
+      "to_phase": "INTAKE",
+      "reason": "Raw request captured."
+    },
+    {
+      "at": "2026-06-05T00:08:00Z",
+      "from_phase": "PROPOSAL_REVIEW",
+      "to_phase": "PROPOSAL_SUMMARY",
+      "reason": "All reviewers passed; adjudicator accepted proposal."
+    },
+    {
+      "at": "2026-06-05T00:30:00Z",
+      "from_phase": "USER_FINAL_CONFIRMATION",
+      "to_phase": "DONE",
+      "reason": "Final report accepted."
+    }
+  ]
+}

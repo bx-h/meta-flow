@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Meta Flow</title>
+  <desc id="desc">Connected workflow nodes for the Meta Flow Codex plugin.</desc>
+  <rect width="128" height="128" rx="18" fill="#102033"/>
+  <circle cx="30" cy="38" r="10" fill="#7dd3fc"/>
+  <circle cx="70" cy="38" r="10" fill="#facc15"/>
+  <circle cx="102" cy="64" r="10" fill="#86efac"/>
+  <circle cx="70" cy="92" r="10" fill="#fda4af"/>
+  <path d="M40 38h20M78 43l14 14M94 70 78 84M62 88 38 48" fill="none" stroke="#e2e8f0" stroke-width="6" stroke-linecap="round"/>
+</svg>

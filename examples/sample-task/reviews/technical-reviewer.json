@@ -1,0 +1,16 @@
+{
+  "task_id": "sample-health-check",
+  "reviewer": "technical_reviewer",
+  "decision": "pass",
+  "confidence": 0.82,
+  "summary": "The implementation path is small and should fit existing backend route patterns.",
+  "blocking_issues": [],
+  "suggested_changes": [
+    "Use existing route test utilities rather than adding a new testing dependency."
+  ],
+  "missing_information": [],
+  "evidence_refs": [
+    "goal-contract.json#constraints",
+    "proposal.md#Alternatives"
+  ]
+}

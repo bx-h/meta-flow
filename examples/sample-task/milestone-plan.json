@@ -1,0 +1,31 @@
+{
+  "task_id": "sample-health-check",
+  "milestones": [
+    {
+      "id": "M1",
+      "objective": "Add and verify a shallow health check endpoint.",
+      "scope": [
+        "Route implementation",
+        "Route test",
+        "Endpoint documentation"
+      ],
+      "out_of_scope": [
+        "Dependency readiness checks",
+        "Deployment configuration",
+        "Monitoring dashboards"
+      ],
+      "acceptance_checks": [
+        "Health route test passes.",
+        "Docs describe endpoint path, response, and shallow scope.",
+        "No new runtime dependency is introduced."
+      ],
+      "expected_outputs": [
+        "Endpoint code",
+        "Test coverage",
+        "Documentation update"
+      ],
+      "risk": "medium",
+      "status": "done"
+    }
+  ]
+}

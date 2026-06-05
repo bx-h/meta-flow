@@ -1,0 +1,25 @@
+{
+  "task_id": "sample-health-check",
+  "milestone_id": "M1",
+  "concrete_task_id": "T1",
+  "status": "done",
+  "summary": "Implemented a shallow health endpoint, added a route test, and documented the endpoint contract.",
+  "changed_files": [
+    "src/routes/health.py",
+    "tests/test_health.py",
+    "docs/api.md"
+  ],
+  "commands_run": [
+    "pytest tests/test_health.py"
+  ],
+  "evidence": [
+    "pytest tests/test_health.py -> passed",
+    "docs/api.md contains GET /healthz documentation",
+    "requirements.txt unchanged"
+  ],
+  "discovered_facts": [
+    "The endpoint is intentionally shallow and does not touch dependencies."
+  ],
+  "risk_flags": [],
+  "notes_for_verifier": "Check route response, docs wording, and dependency manifest."
+}
