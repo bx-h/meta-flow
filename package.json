@@ -4,7 +4,7 @@
   "description": "A Codex-native workflow for clarified goals, reviewed proposals, adjudicated plans, task-level execution, verification, and direction-aware iteration.",
   "type": "module",
   "bin": {
-    "meta-flow": "./bin/meta-flow.js"
+    "meta-flow": "bin/meta-flow.js"
   },
   "files": [
     "bin/",
@@ -41,7 +41,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bx-h/meta-flow.git"
+    "url": "git+https://github.com/bx-h/meta-flow.git"
   },
   "homepage": "https://github.com/bx-h/meta-flow",
   "bugs": {

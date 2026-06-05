@@ -34,7 +34,7 @@ async function checkPackageJson() {
   const errors = [];
   if (packageJson.name !== "@bx-h/meta-flow") errors.push("unexpected package name");
   if (packageJson.scripts?.postinstall) errors.push("postinstall must not exist");
-  if (packageJson.bin?.["meta-flow"] !== "./bin/meta-flow.js") errors.push("bin meta-flow is invalid");
+  if (packageJson.bin?.["meta-flow"] !== "bin/meta-flow.js") errors.push("bin meta-flow is invalid");
   if (packageJson.type !== "module") errors.push("type must be module");
   return result("package.json", errors);
 }
