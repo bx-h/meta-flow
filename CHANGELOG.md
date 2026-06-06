@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.8
 
 - Add `meta-flow abandon` / `metaflow abandon` to mark a task as abandoned, close active resume, and retain artifacts for audit.
 - Clarify that `deactivate` only clears the active-task pointer without changing task state.

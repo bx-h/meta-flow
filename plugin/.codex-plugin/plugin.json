@@ -1,6 +1,6 @@
 {
   "name": "meta-flow",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A Codex workflow for turning vague requests into clarified, reviewed, adjudicated, task-level executed, and verified outcomes.",
   "author": {
     "name": "huangbaixi",
