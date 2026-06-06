@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3
+
+- Add a Codex-native runtime controller with active task state, transition enforcement, gates, and resume packs.
+- Add opt-in persistent `AGENTS.md` resume instructions.
+- Require explicit workflow nodes and accepted confirmation gates for proposal, plan, final, and goal-adjustment decisions.
+- Add controller tests and update install, doctor, uninstall, docs, and support wrappers.
+
 ## 0.1.2
 
 - Make installed JSON templates pass their matching validation scripts.

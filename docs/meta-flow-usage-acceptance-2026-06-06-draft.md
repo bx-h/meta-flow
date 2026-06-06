@@ -414,7 +414,7 @@ $meta-workflow start: ...
 
 前置：
 
-- 源码是 `0.1.2`。
+- 源码是 `0.1.3`。
 - 已安装 plugin 或 marketplace 是 `0.1.1`。
 
 用户行为：
