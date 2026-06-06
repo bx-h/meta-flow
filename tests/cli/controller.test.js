@@ -24,6 +24,14 @@ test("controller starts active task and emits resume payloads", async () => {
 
   const events = await fs.readFile(path.join(taskDir, "events.ndjson"), "utf8");
   assert.match(events, /task_started/);
+  assert.match(events, /start_questioning/);
+
+  const artifactIndex = JSON.parse(await fs.readFile(path.join(taskDir, "artifact-index.json"), "utf8"));
+  assert.equal(artifactIndex.layout, "by-node-v1");
+  assert.equal(artifactIndex.artifacts[0].node_key, "01-INTAKE");
+  assert.equal(artifactIndex.artifacts[0].status, "done");
+  assert.equal(await exists(path.join(taskDir, "artifacts", "raw-request.md")), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "01-INTAKE", "done", "raw-request.md")), true);
 
   const status = runController(root, ["status", "--format", "json"]);
   assert.equal(status.status, 0, status.stderr);
@@ -48,13 +56,14 @@ test("controller advances only through allowed transitions with required artifac
 
   const missing = runController(root, ["advance", "--event", "goal_contract_drafted"]);
   assert.notEqual(missing.status, 0);
-  assert.match(`${missing.stdout}\n${missing.stderr}`, /missing required artifacts: goal-contract\.json/);
+  assert.match(`${missing.stdout}\n${missing.stderr}`, /missing required artifacts: questioning-report\.json, goal-contract\.json/);
 
   const targetMissing = runController(root, ["advance", "--to", "GOAL_CONTRACT_DRAFTED"]);
   assert.notEqual(targetMissing.status, 0);
-  assert.match(`${targetMissing.stdout}\n${targetMissing.stderr}`, /missing required artifacts: goal-contract\.json/);
+  assert.match(`${targetMissing.stdout}\n${targetMissing.stderr}`, /missing required artifacts: questioning-report\.json, goal-contract\.json/);
 
   const taskDir = path.join(root, "tasks", "T-auth");
+  await fs.writeFile(path.join(taskDir, "questioning-report.json"), "{}\n");
   await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
 
   const advance = runController(root, ["advance", "--event", "goal_contract_drafted", "--reason", "Goal contract drafted.", "--format", "json"]);
@@ -64,8 +73,139 @@ test("controller advances only through allowed transitions with required artifac
 
   const state = JSON.parse(await fs.readFile(path.join(taskDir, "state.json"), "utf8"));
   assert.equal(state.phase, "GOAL_CONTRACT_DRAFTED");
+  const artifactIndex = JSON.parse(await fs.readFile(path.join(taskDir, "artifact-index.json"), "utf8"));
+  assert.equal(artifactIndex.artifacts.some((entry) => entry.node_key === "02-QUESTIONING" && entry.name === "goal-contract.json"), true);
+  assert.equal(artifactIndex.artifacts.some((entry) => entry.node_key === "02-QUESTIONING" && entry.name === "questioning-report.json"), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "goal-contract.json")), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "goal-contract.json")), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "questioning-report.json")), true);
+  const artifactValidation = runController(root, ["artifacts", "validate", "--format", "json"]);
+  assert.equal(artifactValidation.status, 0, artifactValidation.stderr);
+  assert.equal(JSON.parse(artifactValidation.stdout).ok, true);
   const events = await fs.readFile(path.join(taskDir, "events.ndjson"), "utf8");
   assert.match(events, /goal_contract_drafted/);
+});
+
+test("controller validates and migrates legacy tasks without artifact index", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-legacy-test-")), ".meta-flow");
+  const taskDir = path.join(root, "tasks", "T-legacy");
+  await fs.mkdir(path.join(taskDir, "gates"), { recursive: true });
+  await fs.mkdir(path.join(taskDir, "runs"), { recursive: true });
+  const createdAt = "2026-01-01T00:00:00Z";
+  await writeJson(path.join(taskDir, "state.json"), {
+    task_id: "T-legacy",
+    workflow_version: "1",
+    phase: "QUESTIONING",
+    created_at: createdAt,
+    updated_at: createdAt,
+    status: "active",
+    last_route_decision: "Legacy task.",
+    history: []
+  });
+  await writeJson(path.join(root, "active-task.json"), {
+    version: "1",
+    task_id: "T-legacy",
+    task_dir: "tasks/T-legacy",
+    status: "active",
+    phase: "QUESTIONING",
+    updated_at: createdAt
+  });
+  await writeJson(path.join(root, "task-index.json"), {
+    version: "1",
+    tasks: [{
+      task_id: "T-legacy",
+      task_dir: "tasks/T-legacy",
+      status: "active",
+      phase: "QUESTIONING",
+      created_at: createdAt,
+      updated_at: createdAt
+    }]
+  });
+  await fs.writeFile(path.join(taskDir, "events.ndjson"), [
+    JSON.stringify({ at: createdAt, actor: "controller", event: "task_started", from_phase: "NONE", to_phase: "INTAKE", artifact_refs: ["raw-request.md", "artifacts/raw-request.md"] }),
+    JSON.stringify({ at: createdAt, actor: "controller", event: "start_questioning", from_phase: "INTAKE", to_phase: "QUESTIONING", artifact_refs: [] }),
+    ""
+  ].join("\n"));
+  await fs.writeFile(path.join(taskDir, "raw-request.md"), "legacy request\n");
+  await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
+
+  const legacyValidation = runController(root, ["artifacts", "validate", "T-legacy", "--format", "json"]);
+  assert.equal(legacyValidation.status, 0, legacyValidation.stderr);
+  const legacyPayload = JSON.parse(legacyValidation.stdout);
+  assert.equal(legacyPayload.legacy_without_index, true);
+  assert.equal(legacyPayload.warnings.length, 1);
+
+  const legacyGateOpen = runController(root, ["gate", "open", "--type", "clarifying_questions", "--prompt", "Need one answer?", "--format", "json"]);
+  assert.equal(legacyGateOpen.status, 0, legacyGateOpen.stderr);
+  const legacyGate = JSON.parse(legacyGateOpen.stdout);
+  assert.equal(runController(root, ["gate", "decide", "--gate", legacyGate.gate_id, "--decision", "accept"]).status, 0);
+
+  const advance = runController(root, ["advance", "--event", "goal_contract_drafted", "--format", "json"]);
+  assert.equal(advance.status, 0, advance.stderr);
+  assert.equal(JSON.parse(advance.stdout).phase, "GOAL_CONTRACT_DRAFTED");
+  assert.equal(await exists(path.join(taskDir, "questioning-report.json")), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "questioning-report.json")), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "goal-contract.json")), true);
+
+  const validation = runController(root, ["artifacts", "validate", "T-legacy", "--format", "json"]);
+  assert.equal(validation.status, 0, validation.stderr);
+  assert.equal(JSON.parse(validation.stdout).ok, true);
+});
+
+test("controller rejects corrupted artifact manifests", async () => {
+  {
+    const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-missing-index-test-")), ".meta-flow");
+    assert.equal(runController(root, ["start", "Missing index", "--task-id", "T-missing-index"]).status, 0);
+    const taskDir = path.join(root, "tasks", "T-missing-index");
+    await fs.unlink(path.join(taskDir, "artifact-index.json"));
+
+    const validation = runController(root, ["artifacts", "validate", "T-missing-index", "--format", "json"]);
+    assert.notEqual(validation.status, 0);
+    assert.match(validation.stdout, /artifact-index\.json is missing while artifacts\/by-node layout exists/);
+  }
+
+  {
+    const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-bad-layout-test-")), ".meta-flow");
+    assert.equal(runController(root, ["start", "Bad layout", "--task-id", "T-bad-layout"]).status, 0);
+    const taskDir = path.join(root, "tasks", "T-bad-layout");
+    const artifactIndexPath = path.join(taskDir, "artifact-index.json");
+    const artifactIndex = await readJson(artifactIndexPath);
+    artifactIndex.layout = "not-by-node";
+    await writeJson(artifactIndexPath, artifactIndex);
+
+    const validation = runController(root, ["artifacts", "validate", "T-bad-layout", "--format", "json"]);
+    assert.notEqual(validation.status, 0);
+    assert.match(validation.stdout, /artifact-index\.json layout must be by-node-v1/);
+  }
+});
+
+test("controller requires adjudication report for adjudicator ask-user route", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-adjudication-ask-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Ask user from adjudication", "--task-id", "T-adjudication-ask"]).status, 0);
+  const taskDir = path.join(root, "tasks", "T-adjudication-ask");
+
+  await writeArtifact(taskDir, "questioning-report.json", "{}\n");
+  await writeArtifact(taskDir, "goal-contract.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
+  await writeArtifact(taskDir, "proposal.md", "proposal\n");
+  assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
+  await writeArtifact(taskDir, "review-aggregate.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
+
+  const status = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.deepEqual(status.expected_artifacts_by_event.adjudication_ask_user, ["adjudication-report.json"]);
+  const missing = runController(root, ["advance", "--event", "adjudication_ask_user"]);
+  assert.notEqual(missing.status, 0);
+  assert.match(`${missing.stdout}\n${missing.stderr}`, /missing required artifacts: adjudication-report\.json/);
+
+  await writeArtifact(taskDir, "adjudication-report.json", "{}\n");
+  const advance = runController(root, ["advance", "--event", "adjudication_ask_user", "--format", "json"]);
+  assert.equal(advance.status, 0, advance.stderr);
+  assert.equal(JSON.parse(advance.stdout).phase, "QUESTIONING");
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "06-ADJUDICATION", "done", "adjudication-report.json")), true);
+  const validation = runController(root, ["artifacts", "validate", "T-adjudication-ask", "--format", "json"]);
+  assert.equal(validation.status, 0, validation.stderr);
 });
 
 test("controller records human gates without advancing phase", async () => {
@@ -86,6 +226,18 @@ test("controller records human gates without advancing phase", async () => {
   const decided = JSON.parse(decide.stdout);
   assert.equal(decided.status, "decided");
   assert.equal(decided.decision, "accept");
+  assert.equal(await exists(path.join(root, "tasks", "T-release", "artifacts", "by-node", "02-QUESTIONING", "open", `${gate.gate_id}.json`)), true);
+  assert.equal(await exists(path.join(root, "tasks", "T-release", "artifacts", "by-node", "02-QUESTIONING", "decided", `${gate.gate_id}.json`)), true);
+
+  const taskDir = path.join(root, "tasks", "T-release");
+  const artifactIndexPath = path.join(taskDir, "artifact-index.json");
+  const artifactIndex = await readJson(artifactIndexPath);
+  const openedEntry = artifactIndex.artifacts.find((entry) => entry.event === "gate_opened" && entry.name === `${gate.gate_id}.json`);
+  openedEntry.status = "decided";
+  await writeJson(artifactIndexPath, artifactIndex);
+  const corruptedValidation = runController(root, ["artifacts", "validate", "T-release", "--format", "json"]);
+  assert.notEqual(corruptedValidation.status, 0);
+  assert.match(corruptedValidation.stdout, /gate artifact status mismatch/);
 });
 
 test("controller requires decided confirmation gates before user acceptance events", async () => {
@@ -93,6 +245,7 @@ test("controller requires decided confirmation gates before user acceptance even
   assert.equal(runController(root, ["start", "Confirm proposal", "--task-id", "T-confirm"]).status, 0);
   const taskDir = path.join(root, "tasks", "T-confirm");
 
+  await fs.writeFile(path.join(taskDir, "questioning-report.json"), "{}\n");
   await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
@@ -119,6 +272,148 @@ test("controller requires decided confirmation gates before user acceptance even
   const accepted = runController(root, ["advance", "--event", "proposal_accepted", "--format", "json"]);
   assert.equal(accepted.status, 0, accepted.stderr);
   assert.equal(JSON.parse(accepted.stdout).phase, "PROPOSAL_ACCEPTED");
+  assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "09-USER_PROPOSAL_CONFIRMATION", "done", `${gate.gate_id}.json`)), true);
+  const artifactValidation = runController(root, ["artifacts", "validate", "--format", "json"]);
+  assert.equal(artifactValidation.status, 0, artifactValidation.stderr);
+  assert.equal(JSON.parse(artifactValidation.stdout).ok, true);
+});
+
+test("controller maintains artifact layout for main execution nodes", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-artifacts-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Run full artifact layout", "--task-id", "T-artifacts"]).status, 0);
+  const taskDir = path.join(root, "tasks", "T-artifacts");
+
+  await writeArtifact(taskDir, "questioning-report.json", "{}\n");
+  await writeArtifact(taskDir, "goal-contract.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
+  await writeArtifact(taskDir, "proposal.md", "proposal\n");
+  assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
+  await writeArtifact(taskDir, "review-aggregate.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
+  const adjudicationStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.deepEqual(adjudicationStatus.expected_artifacts_by_event.adjudication_accept, ["adjudication-report.json"]);
+  assert.deepEqual(adjudicationStatus.expected_artifacts_by_event.adjudication_revise, ["adjudication-report.json"]);
+  await writeArtifact(taskDir, "adjudication-report.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "adjudication_accept"]).status, 0);
+  await writeArtifact(taskDir, "proposal-summary.md", "summary\n");
+  assert.equal(runController(root, ["advance", "--event", "proposal_summarized"]).status, 0);
+  await decideAcceptGate(root, "proposal_confirmation", "Accept proposal?");
+  assert.equal(runController(root, ["advance", "--event", "proposal_accepted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "planning_started"]).status, 0);
+  await writeArtifact(taskDir, "milestone-plan.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
+  await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
+  assert.equal(runController(root, ["advance", "--event", "plan_accepted"]).status, 0);
+  await writeArtifact(taskDir, "task-list.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
+  await writeArtifact(taskDir, "task-spec.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  await writeArtifact(taskDir, "task-execution-report.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
+  await writeArtifact(taskDir, "task-verification-report.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "verification_passed"]).status, 0);
+  await writeArtifact(taskDir, "direction-evaluation.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "milestone_completed"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "direction_final"]).status, 0);
+  await writeArtifact(taskDir, "final-report.md", "final\n");
+  assert.equal(runController(root, ["advance", "--event", "final_summarized"]).status, 0);
+  const finalGate = await decideAcceptGate(root, "final_confirmation", "Accept final?");
+  assert.equal(runController(root, ["advance", "--event", "final_accepted"]).status, 0);
+
+  const validation = runController(root, ["artifacts", "validate", "T-artifacts", "--format", "json"]);
+  assert.equal(validation.status, 0, validation.stderr);
+  assert.equal(JSON.parse(validation.stdout).ok, true);
+
+  const expectedPaths = [
+    ["13-MILESTONE_SELECTED", "done", "task-list.json"],
+    ["14-TASK_DECOMPOSITION", "done", "task-spec.json"],
+    ["15-TASK_EXECUTION", "done", "task-execution-report.json"],
+    ["16-TASK_VERIFICATION", "done", "task-verification-report.json"],
+    ["18-MILESTONE_COMPLETED", "done", "direction-evaluation.json"],
+    ["19-DIRECTION_EVALUATION", "done", "direction-evaluation.json"],
+    ["23-FINAL_SUMMARY", "done", "final-report.md"],
+    ["24-USER_FINAL_CONFIRMATION", "done", `${finalGate.gate_id}.json`],
+  ];
+  for (const [node, status, fileName] of expectedPaths) {
+    assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", node, status, fileName)), true, `${node}/${status}/${fileName}`);
+  }
+
+  await fs.unlink(path.join(taskDir, "artifacts", "by-node", "14-TASK_DECOMPOSITION", "done", "task-spec.json"));
+  const brokenValidation = runController(root, ["artifacts", "validate", "T-artifacts", "--format", "json"]);
+  assert.notEqual(brokenValidation.status, 0);
+  assert.match(brokenValidation.stdout, /display artifact missing: artifacts\/by-node\/14-TASK_DECOMPOSITION\/done\/task-spec\.json/);
+});
+
+test("controller keeps repeated loop artifacts distinct and records repair node artifacts", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-loop-artifacts-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Repair loop artifacts", "--task-id", "T-loop"]).status, 0);
+  const taskDir = path.join(root, "tasks", "T-loop");
+
+  await writeArtifact(taskDir, "questioning-report.json", "{}\n");
+  await writeArtifact(taskDir, "goal-contract.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
+  await writeArtifact(taskDir, "proposal.md", "proposal\n");
+  assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
+  await writeArtifact(taskDir, "review-aggregate.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
+  await writeArtifact(taskDir, "adjudication-report.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "adjudication_accept"]).status, 0);
+  await writeArtifact(taskDir, "proposal-summary.md", "summary\n");
+  assert.equal(runController(root, ["advance", "--event", "proposal_summarized"]).status, 0);
+  await decideAcceptGate(root, "proposal_confirmation", "Accept proposal?");
+  assert.equal(runController(root, ["advance", "--event", "proposal_accepted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "planning_started"]).status, 0);
+  await writeArtifact(taskDir, "milestone-plan.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
+  await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
+  assert.equal(runController(root, ["advance", "--event", "plan_accepted"]).status, 0);
+  await writeArtifact(taskDir, "task-list.json", "{}\n");
+  assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
+  await writeArtifact(taskDir, "task-spec.json", "{\"attempt\":0}\n");
+  assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  await writeArtifact(taskDir, "task-execution-report.json", "{\"attempt\":0}\n");
+  assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
+
+  const verificationStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.deepEqual(verificationStatus.expected_artifacts_by_event.verification_passed, ["task-verification-report.json"]);
+  assert.deepEqual(verificationStatus.expected_artifacts_by_event.verification_revise, ["task-verification-report.json"]);
+
+  await writeArtifact(taskDir, "task-verification-report.json", "{\"decision\":\"revise\",\"attempt\":1}\n");
+  assert.equal(runController(root, ["advance", "--event", "verification_revise"]).status, 0);
+  await writeArtifact(taskDir, "task-spec.json", "{\"attempt\":1}\n");
+  assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  await writeArtifact(taskDir, "task-execution-report.json", "{\"attempt\":1}\n");
+  assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
+  await writeArtifact(taskDir, "task-verification-report.json", "{\"decision\":\"revise\",\"attempt\":2}\n");
+  assert.equal(runController(root, ["advance", "--event", "verification_revise"]).status, 0);
+
+  const validation = runController(root, ["artifacts", "validate", "T-loop", "--format", "json"]);
+  assert.equal(validation.status, 0, validation.stderr);
+  assert.equal(JSON.parse(validation.stdout).ok, true);
+  const artifactIndex = JSON.parse(await fs.readFile(path.join(taskDir, "artifact-index.json"), "utf8"));
+  const verificationEntries = artifactIndex.artifacts.filter((entry) => entry.event === "verification_revise" && entry.name === "task-verification-report.json");
+  assert.deepEqual(verificationEntries.map((entry) => entry.display_path), [
+    "artifacts/by-node/16-TASK_VERIFICATION/done/task-verification-report.json",
+    "artifacts/by-node/16-TASK_VERIFICATION/done/02-verification_revise/task-verification-report.json"
+  ]);
+  assert.notEqual(
+    await fs.readFile(path.join(taskDir, verificationEntries[0].display_path), "utf8"),
+    await fs.readFile(path.join(taskDir, verificationEntries[1].display_path), "utf8")
+  );
+  const repairTaskSpec = artifactIndex.artifacts.find((entry) => entry.event === "task_selected" && entry.node_key === "17-TASK_REPAIR");
+  assert.equal(repairTaskSpec?.display_path, "artifacts/by-node/17-TASK_REPAIR/done/task-spec.json");
+
+  const corruptedIndex = JSON.parse(JSON.stringify(artifactIndex));
+  const corruptedRepairTaskSpec = corruptedIndex.artifacts.find((entry) => entry.event === "task_selected" && entry.node_key === "17-TASK_REPAIR");
+  corruptedRepairTaskSpec.node = "TASK_DECOMPOSITION";
+  corruptedRepairTaskSpec.node_key = "14-TASK_DECOMPOSITION";
+  corruptedRepairTaskSpec.node_order = 14;
+  await writeJson(path.join(taskDir, "artifact-index.json"), corruptedIndex);
+  const corruptedValidation = runController(root, ["artifacts", "validate", "T-loop", "--format", "json"]);
+  assert.notEqual(corruptedValidation.status, 0);
+  assert.match(corruptedValidation.stdout, /TASK_REPAIR/);
 });
 
 function runController(root, args) {
@@ -129,4 +424,35 @@ function runController(root, args) {
       PYTHONDONTWRITEBYTECODE: "1"
     }
   });
+}
+
+async function writeArtifact(taskDir, name, content) {
+  await fs.writeFile(path.join(taskDir, name), content);
+}
+
+async function writeJson(filePath, data) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+async function readJson(filePath) {
+  return JSON.parse(await fs.readFile(filePath, "utf8"));
+}
+
+async function decideAcceptGate(root, type, prompt) {
+  const open = runController(root, ["gate", "open", "--type", type, "--prompt", prompt, "--format", "json"]);
+  assert.equal(open.status, 0, open.stderr);
+  const gate = JSON.parse(open.stdout);
+  const decide = runController(root, ["gate", "decide", "--gate", gate.gate_id, "--decision", "accept", "--format", "json"]);
+  assert.equal(decide.status, 0, decide.stderr);
+  return gate;
+}
+
+async function exists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }

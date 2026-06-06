@@ -41,7 +41,7 @@ Delete operations are limited to confirmed meta-flow plugin directories, managed
 Use version pinning for reproducibility:
 
 ```bash
-npx @bx-h/meta-flow@0.1.3 install --scope repo
+npx @bx-h/meta-flow@0.1.4 install --scope repo
 ```
 
 Run dry-run before installing:

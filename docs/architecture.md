@@ -41,9 +41,14 @@ Meta Flow is a long-running workflow, so the Skill is only the entrypoint. The r
 - `.meta-flow/task-index.json`: task list and latest known status.
 - `.meta-flow/tasks/<task-id>/state.json`: current workflow snapshot.
 - `.meta-flow/tasks/<task-id>/events.ndjson`: append-only transition history.
+- `.meta-flow/tasks/<task-id>/artifact-index.json`: node-to-artifact manifest.
+- `.meta-flow/tasks/<task-id>/artifacts/<name>`: canonical machine-readable artifact paths.
+- `.meta-flow/tasks/<task-id>/artifacts/by-node/<order>-<phase>/<status>/`: human-readable node artifact view; repeated attempts use numbered subdirectories under the same node/status.
 - `.meta-flow/tasks/<task-id>/gates/*.json`: human confirmation points.
 
 Codex should ask the controller for `resume --format codex` before continuing a meta-flow task. The controller returns the internal phase, user-facing stage, next bounded action, open gate, and allowed user actions. Codex explains that stage to the user and advances only through controller-approved transitions.
+
+Canonical artifact filenames remain stable because validators and role contracts use them as machine contracts. The by-node directory is an indexed view for humans and diagnostics; `controller.py artifacts validate` checks that the manifest and view match the events that have occurred after artifact-index adoption. Legacy tasks without `artifact-index.json` are reported as legacy instead of being treated as corrupt.
 
 Persistent mode is a Codex-native opt-in. `meta-flow install --persistent` writes a managed block to `AGENTS.md` that tells Codex to run `controller.py resume --format codex` whenever `.meta-flow/active-task.json` exists. This is the durable surface that prevents the workflow from depending on a Skill staying sticky across turns. The default install does not modify `AGENTS.md`; users can still continue manually with `$meta-flow resume`.
 

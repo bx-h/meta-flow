@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,38 @@ from _common import fail, load_json, write_json
 
 ROOT = Path(os.environ.get("META_FLOW_ROOT", Path.cwd() / ".meta-flow"))
 WORKFLOW_VERSION = "1"
+ARTIFACT_INDEX_LAYOUT = "by-node-v1"
+
+PHASE_SEQUENCE = [
+    "INTAKE",
+    "QUESTIONING",
+    "GOAL_CONTRACT_DRAFTED",
+    "RESEARCH_AND_PROPOSAL",
+    "PROPOSAL_REVIEW",
+    "ADJUDICATION",
+    "PROPOSAL_REWORK",
+    "PROPOSAL_SUMMARY",
+    "USER_PROPOSAL_CONFIRMATION",
+    "PROPOSAL_ACCEPTED",
+    "PLANNING",
+    "USER_PLAN_CONFIRMATION",
+    "MILESTONE_SELECTED",
+    "TASK_DECOMPOSITION",
+    "TASK_EXECUTION",
+    "TASK_VERIFICATION",
+    "TASK_REPAIR",
+    "MILESTONE_COMPLETED",
+    "DIRECTION_EVALUATION",
+    "CONTINUE_NEXT_MILESTONE",
+    "REPLAN",
+    "GOAL_ADJUSTMENT_REQUIRED",
+    "FINAL_SUMMARY",
+    "USER_FINAL_CONFIRMATION",
+    "DONE",
+    "BLOCKED",
+]
+
+PHASE_ORDER = {phase: index + 1 for index, phase in enumerate(PHASE_SEQUENCE)}
 
 
 PHASE_LABELS = {
@@ -55,7 +89,7 @@ NEXT_ACTION_BY_PHASE = {
     "QUESTIONING": {
         "kind": "role",
         "role": "questioner",
-        "instruction": "Resolve blocking questions or record assumptions, then produce goal-contract.json.",
+        "instruction": "Resolve blocking questions or record assumptions, then produce questioning-report.json and goal-contract.json.",
         "completion_event": "goal_contract_drafted",
     },
     "GOAL_CONTRACT_DRAFTED": {
@@ -127,7 +161,7 @@ NEXT_ACTION_BY_PHASE = {
     "TASK_DECOMPOSITION": {
         "kind": "role",
         "role": "task_decomposer",
-        "instruction": "Validate task-list.json and select the next concrete task.",
+        "instruction": "Validate task-list.json, select the next concrete task, and write task-spec.json.",
         "completion_event": "task_selected",
     },
     "TASK_EXECUTION": {
@@ -236,24 +270,30 @@ TRANSITIONS = {
     "final_accepted": {"USER_FINAL_CONFIRMATION": "DONE"},
 }
 
-REQUIRED_ARTIFACTS_BY_EVENT = {
-    "goal_contract_drafted": ["goal-contract.json"],
-    "proposal_created": ["proposal.md"],
-    "reviews_aggregated": ["review-aggregate.json"],
-    "adjudication_accept": ["adjudication-report.json"],
-    "adjudication_revise": ["adjudication-report.json"],
-    "proposal_summarized": ["proposal-summary.md"],
-    "milestone_plan_created": ["milestone-plan.json"],
-    "tasks_decomposed": ["task-list.json"],
-    "task_executed": ["task-execution-report.json"],
-    "verification_passed": ["task-verification-report.json"],
-    "verification_revise": ["task-verification-report.json"],
-    "milestone_completed": ["direction-evaluation.json"],
-    "direction_continue": ["direction-evaluation.json"],
-    "direction_replan": ["direction-evaluation.json"],
-    "direction_adjust_goal": ["direction-evaluation.json"],
-    "direction_final": ["direction-evaluation.json"],
-    "final_summarized": ["final-report.md"],
+ARTIFACT_SPECS_BY_EVENT = {
+    "task_started": [{"name": "raw-request.md", "phase": "INTAKE"}],
+    "goal_contract_drafted": [
+        {"name": "questioning-report.json", "phase": "QUESTIONING"},
+        {"name": "goal-contract.json", "phase": "QUESTIONING"},
+    ],
+    "proposal_created": [{"name": "proposal.md"}],
+    "reviews_aggregated": [{"name": "review-aggregate.json", "phase": "PROPOSAL_REVIEW"}],
+    "adjudication_accept": [{"name": "adjudication-report.json", "phase": "ADJUDICATION"}],
+    "adjudication_revise": [{"name": "adjudication-report.json", "phase": "ADJUDICATION"}],
+    "adjudication_ask_user": [{"name": "adjudication-report.json", "phase": "ADJUDICATION", "from_phase": "ADJUDICATION"}],
+    "proposal_summarized": [{"name": "proposal-summary.md", "phase": "PROPOSAL_SUMMARY"}],
+    "milestone_plan_created": [{"name": "milestone-plan.json", "phase": "PLANNING"}],
+    "tasks_decomposed": [{"name": "task-list.json", "phase": "MILESTONE_SELECTED"}],
+    "task_selected": [{"name": "task-spec.json"}],
+    "task_executed": [{"name": "task-execution-report.json", "phase": "TASK_EXECUTION"}],
+    "verification_passed": [{"name": "task-verification-report.json", "phase": "TASK_VERIFICATION"}],
+    "verification_revise": [{"name": "task-verification-report.json", "phase": "TASK_VERIFICATION"}],
+    "milestone_completed": [{"name": "direction-evaluation.json", "phase": "MILESTONE_COMPLETED"}],
+    "direction_continue": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION"}],
+    "direction_replan": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION"}],
+    "direction_adjust_goal": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION"}],
+    "direction_final": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION"}],
+    "final_summarized": [{"name": "final-report.md", "phase": "FINAL_SUMMARY"}],
 }
 
 REQUIRED_DECIDED_GATE_BY_EVENT = {
@@ -289,6 +329,14 @@ def task_index_path(root: Path) -> Path:
     return root / "task-index.json"
 
 
+def artifact_index_path(task_dir: Path) -> Path:
+    return task_dir / "artifact-index.json"
+
+
+def artifacts_dir(task_dir: Path) -> Path:
+    return task_dir / "artifacts"
+
+
 def task_dir_for(root: Path, task_id: str) -> Path:
     return tasks_root(root) / task_id
 
@@ -314,10 +362,263 @@ def relative_to_root(root: Path, value: Path) -> str:
         return str(value)
 
 
+def relative_to_task(task_dir: Path, value: Path) -> str:
+    try:
+        return str(value.relative_to(task_dir))
+    except ValueError:
+        return str(value)
+
+
+def node_order(phase: str) -> int:
+    return PHASE_ORDER.get(phase, 99)
+
+
+def node_key(phase: str) -> str:
+    return f"{node_order(phase):02d}-{phase}"
+
+
+def spec_applies_to_phase(spec: dict[str, Any], from_phase: str | None) -> bool:
+    expected_from_phase = spec.get("from_phase")
+    return not expected_from_phase or expected_from_phase == from_phase
+
+
+def artifact_specs_for_event(event: str, from_phase: str | None) -> list[dict[str, Any]]:
+    return [
+        spec
+        for spec in ARTIFACT_SPECS_BY_EVENT.get(event, [])
+        if spec_applies_to_phase(spec, from_phase)
+    ]
+
+
+def artifact_phase_for_spec(spec: dict[str, Any], from_phase: str | None) -> str:
+    phase = spec.get("phase") or from_phase
+    return phase if isinstance(phase, str) and phase else "UNKNOWN"
+
+
+def required_artifact_names_for_event(event: str, from_phase: str | None) -> list[str]:
+    if event == "task_started":
+        return []
+    return [spec["name"] for spec in artifact_specs_for_event(event, from_phase)]
+
+
 def write_event(task_dir: Path, event: dict[str, Any]) -> None:
     events_path = task_dir / "events.ndjson"
     with events_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def read_events(task_dir: Path) -> list[dict[str, Any]]:
+    path = task_dir / "events.ndjson"
+    if not path.exists():
+        return []
+    events = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        data = json.loads(line)
+        if isinstance(data, dict):
+            events.append(data)
+    return events
+
+
+def empty_artifact_index() -> dict[str, Any]:
+    return {
+        "version": WORKFLOW_VERSION,
+        "layout": ARTIFACT_INDEX_LAYOUT,
+        "adopted_at": None,
+        "updated_at": None,
+        "artifacts": [],
+    }
+
+
+def load_artifact_index(task_dir: Path) -> dict[str, Any]:
+    path = artifact_index_path(task_dir)
+    if not path.exists():
+        return empty_artifact_index()
+    data = load_json(path)
+    if not isinstance(data, dict):
+        fail([f"{path} must be an object"])
+    data.setdefault("version", WORKFLOW_VERSION)
+    data.setdefault("layout", ARTIFACT_INDEX_LAYOUT)
+    data.setdefault("adopted_at", None)
+    data.setdefault("artifacts", [])
+    return data
+
+
+def write_artifact_index(task_dir: Path, index: dict[str, Any], timestamp: str) -> None:
+    if not index.get("adopted_at"):
+        index["adopted_at"] = timestamp
+    index["updated_at"] = timestamp
+    write_json(artifact_index_path(task_dir), index)
+
+
+def artifact_candidates(task_dir: Path, name: str) -> list[Path]:
+    if name.startswith("gates/"):
+        return [task_dir / name]
+    candidates = []
+    if "/" not in name:
+        candidates.append(task_dir / name)
+        candidates.append(artifacts_dir(task_dir) / name)
+    else:
+        candidates.append(task_dir / name)
+        candidates.append(artifacts_dir(task_dir) / name)
+    return candidates
+
+
+def latest_existing_path(paths: list[Path]) -> Path | None:
+    existing = [path for path in paths if path.exists()]
+    if not existing:
+        return None
+    return max(existing, key=lambda path: path.stat().st_mtime_ns)
+
+
+def canonical_artifact_path(task_dir: Path, name: str) -> Path:
+    if name.startswith("gates/"):
+        return task_dir / name
+    return artifacts_dir(task_dir) / name
+
+
+def safe_path_segment(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-") or "artifact"
+
+
+def content_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def display_artifact_path(task_dir: Path, phase: str, status: str, name: str, occurrence: int = 1, event: str = "") -> Path:
+    safe_name = name.replace("/", "__")
+    base = artifacts_dir(task_dir) / "by-node" / node_key(phase) / status
+    if occurrence <= 1:
+        return base / safe_name
+    event_segment = safe_path_segment(event)
+    return base / f"{occurrence:02d}-{event_segment}" / safe_name
+
+
+def copy_if_needed(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() == destination.resolve():
+        return
+    shutil.copyfile(source, destination)
+
+
+def artifact_occurrence(index: dict[str, Any], phase: str, status: str, name: str) -> int:
+    artifacts = index.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return 1
+    return 1 + sum(
+        1
+        for entry in artifacts
+        if isinstance(entry, dict)
+        and entry.get("node") == phase
+        and entry.get("status") == status
+        and entry.get("name") == name
+    )
+
+
+def ensure_artifact_layout(task_dir: Path, name: str, phase: str, status: str, occurrence: int, event: str) -> tuple[Path, Path, Path]:
+    source = latest_existing_path(artifact_candidates(task_dir, name))
+    if not source:
+        raise SystemExit(f"Cannot record artifact {name}; file not found.")
+    canonical = canonical_artifact_path(task_dir, name)
+    copy_if_needed(source, canonical)
+    display = display_artifact_path(task_dir, phase, status, name, occurrence, event)
+    copy_if_needed(canonical, display)
+    return source, canonical, display
+
+
+def append_artifact_entry(
+    task_dir: Path,
+    index: dict[str, Any],
+    *,
+    event: str,
+    phase: str,
+    status: str,
+    name: str,
+    source: Path,
+    canonical: Path,
+    display: Path,
+    timestamp: str,
+    occurrence: int,
+    artifact_type: str = "file",
+) -> None:
+    artifacts = index.setdefault("artifacts", [])
+    artifacts.append({
+        "sequence": len(artifacts) + 1,
+        "event": event,
+        "artifact_type": artifact_type,
+        "node_order": node_order(phase),
+        "node": phase,
+        "node_key": node_key(phase),
+        "status": status,
+        "occurrence": occurrence,
+        "name": name,
+        "source_path": relative_to_task(task_dir, source),
+        "canonical_path": relative_to_task(task_dir, canonical),
+        "display_path": relative_to_task(task_dir, display),
+        "content_sha256": content_sha256(display),
+        "recorded_at": timestamp,
+    })
+
+
+def record_artifacts_for_event(task_dir: Path, event: str, phase: str, status: str, timestamp: str) -> list[str]:
+    specs = artifact_specs_for_event(event, phase)
+    if not specs:
+        return []
+    index = load_artifact_index(task_dir)
+    refs = []
+    for spec in specs:
+        artifact_phase = artifact_phase_for_spec(spec, phase)
+        name = spec["name"]
+        occurrence = artifact_occurrence(index, artifact_phase, status, name)
+        source, canonical, display = ensure_artifact_layout(task_dir, name, artifact_phase, status, occurrence, event)
+        append_artifact_entry(
+            task_dir,
+            index,
+            event=event,
+            phase=artifact_phase,
+            status=status,
+            name=name,
+            source=source,
+            canonical=canonical,
+            display=display,
+            timestamp=timestamp,
+            occurrence=occurrence,
+        )
+        refs.append(relative_to_task(task_dir, canonical))
+    write_artifact_index(task_dir, index, timestamp)
+    return refs
+
+
+def record_gate_artifact(task_dir: Path, gate: dict[str, Any], status: str, event: str, timestamp: str) -> str:
+    gate_id = gate["gate_id"]
+    phase = gate.get("phase") or "UNKNOWN"
+    name = f"{gate_id}.json"
+    source = task_dir / "gates" / name
+    index = load_artifact_index(task_dir)
+    occurrence = artifact_occurrence(index, phase, status, name)
+    display = display_artifact_path(task_dir, phase, status, name, occurrence, event)
+    copy_if_needed(source, display)
+    append_artifact_entry(
+        task_dir,
+        index,
+        event=event,
+        phase=phase,
+        status=status,
+        name=name,
+        source=source,
+        canonical=source,
+        display=display,
+        timestamp=timestamp,
+        occurrence=occurrence,
+        artifact_type="gate",
+    )
+    write_artifact_index(task_dir, index, timestamp)
+    return relative_to_task(task_dir, source)
 
 
 def update_index(root: Path, state: dict[str, Any], task_dir: Path) -> None:
@@ -407,7 +708,7 @@ def start_task(root: Path, raw_request: str, task_id: str | None = None) -> Path
     resolved_task_id = task_id or f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{slugify(raw_request)}"
     task_dir = task_dir_for(root, resolved_task_id)
     task_dir.mkdir(parents=True, exist_ok=False)
-    (task_dir / "artifacts").mkdir(parents=True, exist_ok=True)
+    artifacts_dir(task_dir).mkdir(parents=True, exist_ok=True)
     (task_dir / "gates").mkdir(parents=True, exist_ok=True)
     (task_dir / "runs").mkdir(parents=True, exist_ok=True)
 
@@ -415,7 +716,8 @@ def start_task(root: Path, raw_request: str, task_id: str | None = None) -> Path
     write_json(task_dir / "state.json", state)
     text = raw_request.rstrip() + "\n"
     (task_dir / "raw-request.md").write_text(text, encoding="utf-8")
-    (task_dir / "artifacts" / "raw-request.md").write_text(text, encoding="utf-8")
+    (artifacts_dir(task_dir) / "raw-request.md").write_text(text, encoding="utf-8")
+    artifact_refs = record_artifacts_for_event(task_dir, "task_started", "INTAKE", "done", timestamp)
     write_event(
         task_dir,
         {
@@ -425,7 +727,7 @@ def start_task(root: Path, raw_request: str, task_id: str | None = None) -> Path
             "from_phase": "NONE",
             "to_phase": "INTAKE",
             "reason": "Raw request captured.",
-            "artifact_refs": ["raw-request.md", "artifacts/raw-request.md"],
+            "artifact_refs": artifact_refs,
         },
     )
     write_event(
@@ -475,17 +777,54 @@ def load_state(task_dir: Path) -> dict[str, Any]:
 
 
 def artifact_exists(task_dir: Path, name: str) -> bool:
-    candidates = [
-        task_dir / name,
-        task_dir / "artifacts" / name,
-    ]
-    if "/" in name:
-        candidates.append(task_dir / name)
-    return any(path.exists() for path in candidates)
+    return latest_existing_path(artifact_candidates(task_dir, name)) is not None
 
 
-def missing_required_artifacts(task_dir: Path, event: str) -> list[str]:
-    return [name for name in REQUIRED_ARTIFACTS_BY_EVENT.get(event, []) if not artifact_exists(task_dir, name)]
+def legacy_without_artifact_index(task_dir: Path) -> bool:
+    return not artifact_index_path(task_dir).exists()
+
+
+def task_started_before_artifact_adoption(task_dir: Path) -> bool:
+    events = read_events(task_dir)
+    started_at = next(
+        (event.get("at") for event in events if event.get("event") == "task_started" and isinstance(event.get("at"), str)),
+        None,
+    )
+    if not artifact_index_path(task_dir).exists():
+        return started_at is not None
+    index = load_artifact_index(task_dir)
+    adopted_at = index.get("adopted_at")
+    if not isinstance(started_at, str) or not isinstance(adopted_at, str):
+        return False
+    return started_at < adopted_at
+
+
+def ensure_legacy_questioning_report(task_dir: Path, timestamp: str) -> None:
+    if artifact_exists(task_dir, "questioning-report.json") or not artifact_exists(task_dir, "goal-contract.json"):
+        return
+    if not task_started_before_artifact_adoption(task_dir):
+        return
+    raw_request = ""
+    raw_path = latest_existing_path(artifact_candidates(task_dir, "raw-request.md"))
+    if raw_path:
+        raw_request = raw_path.read_text(encoding="utf-8").strip()
+    report = {
+        "task_id": load_state(task_dir).get("task_id", task_dir.name),
+        "raw_user_request": raw_request or "Recovered from a legacy task without questioning-report.json.",
+        "known_information": [],
+        "missing_information": [],
+        "clarifying_questions": [],
+        "assumptions_if_user_does_not_answer": [
+            "Legacy task created before questioning-report.json became a required controller artifact."
+        ],
+        "can_continue_without_user_answer": True,
+        "compatibility_generated_at": timestamp,
+    }
+    write_json(task_dir / "questioning-report.json", report)
+
+
+def missing_required_artifacts(task_dir: Path, event: str, from_phase: str | None) -> list[str]:
+    return [name for name in required_artifact_names_for_event(event, from_phase) if not artifact_exists(task_dir, name)]
 
 
 def open_gate(task_dir: Path) -> dict[str, Any] | None:
@@ -567,6 +906,42 @@ def artifact_refs(task_dir: Path) -> list[str]:
     return refs
 
 
+def artifact_summary(task_dir: Path) -> dict[str, Any]:
+    index = load_artifact_index(task_dir)
+    artifacts = index.get("artifacts", [])
+    latest = artifacts[-5:] if isinstance(artifacts, list) else []
+    return {
+        "index_path": str(artifact_index_path(task_dir)),
+        "layout": index.get("layout", "by-node-v1"),
+        "count": len(artifacts) if isinstance(artifacts, list) else 0,
+        "latest": latest,
+    }
+
+
+def completion_events_for_phase(phase: str) -> list[str]:
+    action = NEXT_ACTION_BY_PHASE.get(phase, {})
+    completion_event = action.get("completion_event", "")
+    if not completion_event:
+        return []
+    return [event for event in completion_event.split("|") if event and event != "block"]
+
+
+def expected_artifacts_by_event_for_phase(phase: str) -> dict[str, list[str]]:
+    expected = {}
+    for event in completion_events_for_phase(phase):
+        names = required_artifact_names_for_event(event, phase)
+        if names:
+            expected[event] = names
+    return expected
+
+
+def expected_artifacts_for_next_action(phase: str) -> list[str]:
+    names = []
+    for artifacts in expected_artifacts_by_event_for_phase(phase).values():
+        names.extend(artifacts)
+    return list(dict.fromkeys(names))
+
+
 def status_payload(task_dir: Path) -> dict[str, Any]:
     state = load_state(task_dir)
     phase = state.get("phase", "UNKNOWN")
@@ -590,6 +965,9 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
         "allowed_user_actions": allowed_user_actions(phase, gate),
         "blocked_issues": collect_blocked_issues(task_dir),
         "artifact_refs": artifact_refs(task_dir),
+        "artifact_index": artifact_summary(task_dir),
+        "expected_artifacts_for_next_action": expected_artifacts_for_next_action(phase),
+        "expected_artifacts_by_event": expected_artifacts_by_event_for_phase(phase),
     }
 
 
@@ -617,6 +995,12 @@ def print_text(payload: dict[str, Any]) -> None:
     else:
         print("- none")
     print(f"next recommended action: {payload['next_action']['instruction']}")
+    print(f"artifact index: {payload['artifact_index']['index_path']}")
+    if payload.get("expected_artifacts_by_event"):
+        for event, artifacts in payload["expected_artifacts_by_event"].items():
+            print(f"expected artifacts for {event}: {', '.join(artifacts)}")
+    elif payload["expected_artifacts_for_next_action"]:
+        print(f"next expected artifacts: {', '.join(payload['expected_artifacts_for_next_action'])}")
 
 
 def print_codex(payload: dict[str, Any]) -> None:
@@ -632,6 +1016,13 @@ def print_codex(payload: dict[str, Any]) -> None:
     print(f"Next action role: {payload['next_action']['role']}")
     print(f"Next action: {payload['next_action']['instruction']}")
     print(f"Completion event after the bounded step: {payload['next_action']['completion_event']}")
+    print(f"Artifact index: {payload['artifact_index']['index_path']} ({payload['artifact_index']['count']} entries)")
+    if payload.get("expected_artifacts_by_event"):
+        print("Expected artifacts by completion event:")
+        for event, artifacts in payload["expected_artifacts_by_event"].items():
+            print(f"- {event}: {', '.join(artifacts)}")
+    elif payload["expected_artifacts_for_next_action"]:
+        print(f"Expected artifacts for next action: {', '.join(payload['expected_artifacts_for_next_action'])}")
     if gate:
         print(f"Open gate: {gate.get('gate_id')} ({gate.get('type')})")
         print(f"Gate prompt: {gate.get('prompt', '')}")
@@ -707,13 +1098,19 @@ def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: st
     state = load_state(task_dir)
     event = resolve_event_for_target(state, event, target)
     next_phase = transition_for(state, event, target)
-    missing = missing_required_artifacts(task_dir, event)
+    previous = state.get("phase")
+    timestamp = now()
+    if event == "goal_contract_drafted":
+        ensure_legacy_questioning_report(task_dir, timestamp)
+    missing = missing_required_artifacts(task_dir, event, previous)
     if missing:
         raise SystemExit(f"Cannot advance with {event}; missing required artifacts: {', '.join(missing)}")
     enforce_gate_requirements(task_dir, event)
-    previous = state.get("phase")
     enforce_loop_limits(state, event)
-    timestamp = now()
+    recorded_refs = record_artifacts_for_event(task_dir, event, previous, "done", timestamp)
+    decided_gate = decided_gate_for_event(task_dir, event)
+    if decided_gate:
+        recorded_refs.append(record_gate_artifact(task_dir, decided_gate, "done", event, timestamp))
     state["phase"] = next_phase
     state["updated_at"] = timestamp
     state["status"] = "done" if next_phase == "DONE" else ("blocked" if next_phase == "BLOCKED" else "active")
@@ -725,7 +1122,7 @@ def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: st
         "reason": state["last_route_decision"],
     })
     write_json(task_dir / "state.json", state)
-    refs = artifact_refs_arg or REQUIRED_ARTIFACTS_BY_EVENT.get(event, [])
+    refs = list(dict.fromkeys([*(artifact_refs_arg or []), *recorded_refs]))
     write_event(
         task_dir,
         {
@@ -769,6 +1166,7 @@ def open_gate_command(task_dir: Path, gate_type: str, prompt: str) -> dict[str, 
     gates_dir = task_dir / "gates"
     gates_dir.mkdir(parents=True, exist_ok=True)
     write_json(gates_dir / f"{gate['gate_id']}.json", gate)
+    artifact_ref = record_gate_artifact(task_dir, gate, "open", "gate_opened", timestamp)
     write_event(task_dir, {
         "at": timestamp,
         "actor": "controller",
@@ -776,7 +1174,7 @@ def open_gate_command(task_dir: Path, gate_type: str, prompt: str) -> dict[str, 
         "from_phase": state.get("phase"),
         "to_phase": state.get("phase"),
         "reason": prompt,
-        "artifact_refs": [f"gates/{gate['gate_id']}.json"],
+        "artifact_refs": [artifact_ref],
     })
     return gate
 
@@ -795,6 +1193,7 @@ def decide_gate_command(task_dir: Path, gate_id: str, decision: str, comment: st
     gate["comment"] = comment
     write_json(path, gate)
     state = load_state(task_dir)
+    artifact_ref = record_gate_artifact(task_dir, gate, "decided", "gate_decided", timestamp)
     write_event(task_dir, {
         "at": timestamp,
         "actor": "user",
@@ -802,9 +1201,330 @@ def decide_gate_command(task_dir: Path, gate_id: str, decision: str, comment: st
         "from_phase": state.get("phase"),
         "to_phase": state.get("phase"),
         "reason": f"{decision}: {comment}".strip(),
-        "artifact_refs": [f"gates/{gate_id}.json"],
+        "artifact_refs": [artifact_ref],
     })
     return gate
+
+
+VALID_ARTIFACT_STATUSES = {"done", "open", "decided"}
+VALID_ARTIFACT_TYPES = {"file", "gate"}
+GATE_STATUS_BY_EVENT = {
+    "gate_opened": "open",
+    "gate_decided": "decided",
+}
+GATE_CONSUMING_EVENTS = set(REQUIRED_DECIDED_GATE_BY_EVENT)
+
+
+def by_node_dir(task_dir: Path) -> Path:
+    return artifacts_dir(task_dir) / "by-node"
+
+
+def task_relative_existing_path(task_dir: Path, raw_path: Any, field: str, errors: list[str]) -> Path | None:
+    if not isinstance(raw_path, str) or not raw_path:
+        errors.append(f"artifact entry missing {field}")
+        return None
+    value = Path(raw_path)
+    if value.is_absolute():
+        errors.append(f"{field} must be task-relative: {raw_path}")
+        return None
+    task_root = task_dir.resolve()
+    path = (task_dir / value).resolve()
+    try:
+        path.relative_to(task_root)
+    except ValueError:
+        errors.append(f"{field} escapes task directory: {raw_path}")
+        return None
+    return path
+
+
+def event_after_artifact_adoption(event: dict[str, Any], adopted_at: str | None) -> bool:
+    if not adopted_at:
+        return True
+    event_at = event.get("at")
+    if not isinstance(event_at, str):
+        return True
+    return event_at >= adopted_at
+
+
+def expected_display_path_for_entry(task_dir: Path, entry: dict[str, Any]) -> str | None:
+    node = entry.get("node")
+    status = entry.get("status")
+    name = entry.get("name")
+    occurrence = entry.get("occurrence")
+    event = entry.get("event")
+    if not all(isinstance(value, str) and value for value in (node, status, name, event)):
+        return None
+    if not isinstance(occurrence, int) or occurrence < 1:
+        return None
+    display = display_artifact_path(task_dir, node, status, name, occurrence, event)
+    return relative_to_task(task_dir, display)
+
+
+def validate_artifact_index_header(index: dict[str, Any], errors: list[str]) -> list[dict[str, Any]]:
+    if index.get("version") != WORKFLOW_VERSION:
+        errors.append(f"artifact-index.json version must be {WORKFLOW_VERSION}: {index.get('version')}")
+    if index.get("layout") != ARTIFACT_INDEX_LAYOUT:
+        errors.append(f"artifact-index.json layout must be {ARTIFACT_INDEX_LAYOUT}: {index.get('layout')}")
+    for field in ("adopted_at", "updated_at"):
+        if not isinstance(index.get(field), str) or not index.get(field):
+            errors.append(f"artifact-index.json {field} must be a non-empty string")
+    artifacts = index.get("artifacts")
+    if not isinstance(artifacts, list):
+        errors.append("artifact-index.json artifacts must be a list")
+        return []
+    return artifacts
+
+
+def gate_status_for_event(event_name: str) -> str | None:
+    if event_name in GATE_STATUS_BY_EVENT:
+        return GATE_STATUS_BY_EVENT[event_name]
+    if event_name in GATE_CONSUMING_EVENTS:
+        return "done"
+    return None
+
+
+def gate_name_from_ref(ref: Any) -> str | None:
+    if not isinstance(ref, str):
+        return None
+    path = Path(ref)
+    if len(path.parts) != 2 or path.parts[0] != "gates" or path.suffix != ".json":
+        return None
+    return path.name
+
+
+def validate_gate_artifact_entry(entry: dict[str, Any], display: Path | None, errors: list[str]) -> None:
+    event_name = entry.get("event")
+    status = entry.get("status")
+    name = entry.get("name")
+    if not isinstance(event_name, str):
+        return
+    expected_status = gate_status_for_event(event_name)
+    if not expected_status:
+        errors.append(f"gate artifact event is not allowed for {name}: {event_name}")
+        return
+    if status != expected_status:
+        errors.append(f"gate artifact status mismatch for {name}: {event_name} must use {expected_status}, got {status}")
+    if not display or not display.exists():
+        return
+    try:
+        display_payload = load_json(display)
+    except Exception as exc:
+        errors.append(f"gate display artifact is not valid JSON: {entry.get('display_path')} ({exc})")
+        return
+    if not isinstance(display_payload, dict):
+        errors.append(f"gate display artifact must be an object: {entry.get('display_path')}")
+        return
+    expected_payload_status = "open" if event_name == "gate_opened" else "decided"
+    if display_payload.get("status") != expected_payload_status:
+        errors.append(
+            f"gate display status mismatch for {name}: {event_name} must snapshot {expected_payload_status}, got {display_payload.get('status')}"
+        )
+
+
+def validate_artifacts(task_dir: Path) -> dict[str, Any]:
+    index_exists = artifact_index_path(task_dir).exists()
+    if not index_exists:
+        errors = []
+        if by_node_dir(task_dir).exists():
+            errors.append("artifact-index.json is missing while artifacts/by-node layout exists")
+        if errors:
+            return {
+                "ok": False,
+                "task_dir": str(task_dir),
+                "artifact_index": str(artifact_index_path(task_dir)),
+                "artifact_count": 0,
+                "legacy_without_index": False,
+                "warnings": [],
+                "errors": errors,
+            }
+        return {
+            "ok": True,
+            "task_dir": str(task_dir),
+            "artifact_index": str(artifact_index_path(task_dir)),
+            "artifact_count": 0,
+            "legacy_without_index": True,
+            "warnings": [
+                "artifact-index.json is missing; treating this as a legacy task created before by-node artifacts."
+            ],
+            "errors": [],
+        }
+
+    errors = []
+    warnings = []
+    index = load_json(artifact_index_path(task_dir))
+    if not isinstance(index, dict):
+        index = {}
+        errors.append("artifact-index.json must be an object")
+    artifacts = validate_artifact_index_header(index, errors)
+
+    seen_sequences = set()
+    seen_display_paths = set()
+    latest_entry_by_canonical: dict[str, dict[str, Any]] = {}
+    for position, entry in enumerate(artifacts, start=1):
+        if not isinstance(entry, dict):
+            errors.append("artifact entry must be an object")
+            continue
+        for field in ("event", "node", "node_key", "status", "name", "source_path", "canonical_path", "display_path", "content_sha256"):
+            if not entry.get(field):
+                errors.append(f"artifact entry missing {field}: {entry}")
+        artifact_type = entry.get("artifact_type")
+        if artifact_type not in VALID_ARTIFACT_TYPES:
+            errors.append(f"invalid artifact type for {entry.get('name')}: {artifact_type}")
+        sequence = entry.get("sequence")
+        if not isinstance(sequence, int):
+            errors.append(f"artifact entry sequence must be an integer: {entry.get('name')}")
+        else:
+            if sequence in seen_sequences:
+                errors.append(f"duplicate artifact sequence: {sequence}")
+            seen_sequences.add(sequence)
+            if sequence != position:
+                errors.append(f"artifact sequence mismatch at position {position}: got {sequence}")
+        status = entry.get("status")
+        if status not in VALID_ARTIFACT_STATUSES:
+            errors.append(f"invalid artifact status for {entry.get('name')}: {status}")
+        occurrence = entry.get("occurrence")
+        if not isinstance(occurrence, int) or occurrence < 1:
+            errors.append(f"artifact occurrence must be a positive integer: {entry.get('name')}")
+        source = task_relative_existing_path(task_dir, entry.get("source_path"), "source_path", errors)
+        canonical = task_relative_existing_path(task_dir, entry.get("canonical_path"), "canonical_path", errors)
+        display = task_relative_existing_path(task_dir, entry.get("display_path"), "display_path", errors)
+        if source and not source.exists():
+            errors.append(f"source artifact missing: {entry.get('source_path')}")
+        if canonical and not canonical.exists():
+            errors.append(f"canonical artifact missing: {entry.get('canonical_path')}")
+        if display:
+            display_key = str(Path(entry.get("display_path", "")))
+            if display_key in seen_display_paths:
+                errors.append(f"duplicate display artifact path: {display_key}")
+            seen_display_paths.add(display_key)
+        if display and not display.exists():
+            errors.append(f"display artifact missing: {entry.get('display_path')}")
+        if display and display.exists():
+            expected_hash = entry.get("content_sha256")
+            actual_hash = content_sha256(display)
+            if isinstance(expected_hash, str) and expected_hash != actual_hash:
+                errors.append(f"display artifact hash mismatch: {entry.get('display_path')}")
+        expected_display = expected_display_path_for_entry(task_dir, entry)
+        if expected_display and entry.get("display_path") != expected_display:
+            errors.append(f"display path mismatch for {entry.get('name')}: {entry.get('display_path')} != {expected_display}")
+        if canonical:
+            latest_entry_by_canonical[str(Path(entry.get("canonical_path", "")))] = entry
+        node = entry.get("node")
+        if isinstance(node, str) and entry.get("node_key") != node_key(node):
+            errors.append(f"node_key mismatch for {entry.get('name')}: {entry.get('node_key')} != {node_key(node)}")
+        if isinstance(node, str) and entry.get("node_order") != node_order(node):
+            errors.append(f"node_order mismatch for {entry.get('name')}: {entry.get('node_order')} != {node_order(node)}")
+        if artifact_type == "gate":
+            validate_gate_artifact_entry(entry, display, errors)
+
+    for canonical_path, entry in latest_entry_by_canonical.items():
+        canonical = task_dir / canonical_path
+        expected_hash = entry.get("content_sha256")
+        if canonical.exists() and isinstance(expected_hash, str) and content_sha256(canonical) != expected_hash:
+            warnings.append(f"canonical artifact is newer than historical display for {entry.get('name')}: {canonical_path}")
+
+    events = read_events(task_dir)
+    adopted_at = index.get("adopted_at") if isinstance(index.get("adopted_at"), str) else None
+    relevant_events = [event for event in events if event_after_artifact_adoption(event, adopted_at)]
+    expected_counts: dict[tuple[str, str, str, str], int] = {}
+    for event in relevant_events:
+        event_name = event.get("event")
+        from_phase = event.get("from_phase")
+        if not isinstance(event_name, str):
+            continue
+        if not isinstance(from_phase, str):
+            from_phase = None
+        for spec in artifact_specs_for_event(event_name, from_phase):
+            key = (event_name, spec["name"], artifact_phase_for_spec(spec, from_phase), "done")
+            expected_counts[key] = expected_counts.get(key, 0) + 1
+    actual_counts: dict[tuple[str, str, str, str], int] = {}
+    expected_gate_counts: dict[tuple[str, str, str, str], int] = {}
+    for entry in artifacts:
+        if not isinstance(entry, dict) or entry.get("artifact_type") != "file":
+            continue
+        key = (
+            str(entry.get("event")),
+            str(entry.get("name")),
+            str(entry.get("node")),
+            str(entry.get("status")),
+        )
+        actual_counts[key] = actual_counts.get(key, 0) + 1
+    actual_gate_counts: dict[tuple[str, str, str, str], int] = {}
+    for entry in artifacts:
+        if not isinstance(entry, dict) or entry.get("artifact_type") != "gate":
+            continue
+        key = (
+            str(entry.get("event")),
+            str(entry.get("name")),
+            str(entry.get("node")),
+            str(entry.get("status")),
+        )
+        actual_gate_counts[key] = actual_gate_counts.get(key, 0) + 1
+    for event in relevant_events:
+        event_name = event.get("event")
+        from_phase = event.get("from_phase")
+        if not isinstance(event_name, str) or not isinstance(from_phase, str):
+            continue
+        gate_status = gate_status_for_event(event_name)
+        if not gate_status:
+            continue
+        for ref in event.get("artifact_refs", []):
+            gate_name = gate_name_from_ref(ref)
+            if not gate_name:
+                continue
+            key = (event_name, gate_name, from_phase, gate_status)
+            expected_gate_counts[key] = expected_gate_counts.get(key, 0) + 1
+    for key, expected_count in expected_counts.items():
+        actual_count = actual_counts.get(key, 0)
+        if actual_count != expected_count:
+            event_name, name, phase, status = key
+            errors.append(f"artifact index count mismatch {event_name}:{name}:{phase}:{status}; expected {expected_count}, got {actual_count}")
+    for key, actual_count in actual_counts.items():
+        if key not in expected_counts:
+            event_name, name, phase, status = key
+            errors.append(f"unexpected artifact index entry {event_name}:{name}:{phase}:{status}; got {actual_count}")
+    for key, expected_count in expected_gate_counts.items():
+        actual_count = actual_gate_counts.get(key, 0)
+        if actual_count != expected_count:
+            event_name, name, phase, status = key
+            errors.append(f"gate artifact index count mismatch {event_name}:{name}:{phase}:{status}; expected {expected_count}, got {actual_count}")
+    for key, actual_count in actual_gate_counts.items():
+        if key not in expected_gate_counts:
+            event_name, name, phase, status = key
+            errors.append(f"unexpected gate artifact index entry {event_name}:{name}:{phase}:{status}; got {actual_count}")
+
+    for event in relevant_events:
+        for ref in event.get("artifact_refs", []):
+            if not (task_dir / ref).exists():
+                errors.append(f"event artifact ref missing: {ref}")
+
+    return {
+        "ok": not errors,
+        "task_dir": str(task_dir),
+        "artifact_index": str(artifact_index_path(task_dir)),
+        "artifact_count": len(artifacts),
+        "legacy_without_index": False,
+        "warnings": warnings,
+        "errors": errors,
+    }
+
+
+def render_artifact_validation(result: dict[str, Any], output_format: str) -> None:
+    if output_format == "json":
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    print(f"artifact index: {result['artifact_index']}")
+    print(f"artifact count: {result['artifact_count']}")
+    if result.get("warnings"):
+        print("warnings:")
+        for warning in result["warnings"]:
+            print(f"- {warning}")
+    if result["ok"]:
+        print("artifact layout: ok")
+    else:
+        print("artifact layout: failed")
+        for error in result["errors"]:
+            print(f"- {error}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -849,6 +1569,12 @@ def build_parser() -> argparse.ArgumentParser:
     gate_decide.add_argument("--comment", default="", help="Decision comment.")
     gate_decide.add_argument("--format", choices=["text", "json"], default="text")
 
+    artifacts = subparsers.add_parser("artifacts", help="Inspect or validate artifact layout.")
+    artifacts_subparsers = artifacts.add_subparsers(dest="artifacts_command", required=True)
+    artifacts_validate = artifacts_subparsers.add_parser("validate", help="Validate artifact index and by-node layout.")
+    artifacts_validate.add_argument("task", nargs="?", help="Task id or task directory.")
+    artifacts_validate.add_argument("--format", choices=["text", "json"], default="text")
+
     deactivate = subparsers.add_parser("deactivate", help="Deactivate the active task.")
     deactivate.add_argument("task", nargs="?", help="Task id or task directory.")
 
@@ -887,6 +1613,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(result["gate_id"])
         return 0
+    if args.command == "artifacts":
+        task_dir = resolve_task_dir(root, args.task)
+        if args.artifacts_command == "validate":
+            result = validate_artifacts(task_dir)
+            render_artifact_validation(result, args.format)
+            return 0 if result["ok"] else 1
     if args.command == "deactivate":
         task_dir = resolve_task_dir(root, args.task)
         state = load_state(task_dir)

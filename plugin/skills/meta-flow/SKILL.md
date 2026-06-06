@@ -116,7 +116,7 @@ Stop conditions:
 2. Follow the controller `next_action`.
 3. Invoke `questioner`.
 4. If blocking questions exist, open or respect a user gate before continuing.
-5. Generate `goal-contract.json`.
+5. Generate `questioning-report.json` and `goal-contract.json`.
 6. Validate it:
 
    ```bash
@@ -155,7 +155,7 @@ Stop conditions:
 2. Validate it, open a `plan_confirmation` gate, and only after an `accept` gate decision call `plan_accepted`.
 3. Select one current milestone.
 4. Invoke `task_decomposer` to create `task-list.json`.
-5. Validate the task list.
+5. Validate the task list, then create `task-spec.json` for the selected concrete task before `task_selected`.
 6. Process concrete tasks by dependency order.
 7. For each concrete task:
    - Invoke `executor` for exactly one concrete task.
@@ -194,4 +194,10 @@ Stop conditions:
 
 ## Required Artifacts
 
-Task directories should use the templates in `.meta-flow/templates/` and keep state in `state.json`. The runtime also keeps `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, per-task `events.ndjson`, and optional `gates/*.json`. Scripts in `.meta-flow/scripts/` provide initialization, validation, aggregation, controller-based routing, and status reporting.
+Task directories should use the templates in `.meta-flow/templates/` and keep state in `state.json`. The runtime also keeps `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, per-task `events.ndjson`, `artifact-index.json`, canonical artifacts under `artifacts/<name>`, human-readable node views under `artifacts/by-node/<order>-<phase>/<status>/`, and optional `gates/*.json`. When a node/status emits the same artifact more than once, the first artifact keeps the direct by-node filename and later attempts are stored in numbered subdirectories under that node/status. Scripts in `.meta-flow/scripts/` provide initialization, validation, aggregation, controller-based routing, artifact layout validation, and status reporting.
+
+After a phase advance, run artifact validation when the change is non-trivial:
+
+```bash
+python3 .meta-flow/scripts/controller.py artifacts validate <task-id>
+```

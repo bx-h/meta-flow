@@ -81,7 +81,7 @@ flowchart LR
 
 `planner` converts an accepted proposal into milestone checkpoints in `milestone-plan.json`.
 
-`task_decomposer` breaks the current milestone into concrete tasks in `task-list.json`.
+`task_decomposer` breaks the current milestone into concrete tasks in `task-list.json` and writes the selected `task-spec.json`.
 
 `executor` executes exactly one concrete task and writes `task-execution-report.json`.
 
@@ -253,7 +253,7 @@ The sample task lives at `.meta-flow/examples/sample-task/` and uses the request
 Walkthrough:
 
 1. Raw request is captured in `raw-request.md`.
-2. `questioner` records non-blocking uncertainties and drafts `goal-contract.json`.
+2. `questioner` records non-blocking uncertainties and drafts `questioning-report.json` plus `goal-contract.json`.
 3. `researcher_proposer` writes a shallow `GET /healthz` proposal.
 4. Four reviewers pass the proposal and add scoped suggestions.
 5. `aggregate_reviews.py` writes `review-aggregate.json`.
@@ -296,7 +296,8 @@ python3 .meta-flow/scripts/validate_goal_contract.py <task-dir>/goal-contract.js
 python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <task-dir>/review-aggregate.json
 python3 .meta-flow/scripts/validate_adjudication.py <task-dir>/adjudication-report.json
 python3 .meta-flow/scripts/validate_milestone_plan.py <task-dir>/milestone-plan.json
-python3 .meta-flow/scripts/validate_task_list.py <task-dir>/milestones/M1/task-list.json
-python3 .meta-flow/scripts/validate_task_verification.py <task-dir>/milestones/M1/tasks/T1/verification-report.json
+python3 .meta-flow/scripts/validate_task_list.py <task-dir>/task-list.json
+python3 .meta-flow/scripts/validate_task_verification.py <task-dir>/task-verification-report.json
+python3 .meta-flow/scripts/controller.py artifacts validate <task-id>
 python3 .meta-flow/scripts/status.py <task-dir>
 ```

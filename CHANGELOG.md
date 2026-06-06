@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Add artifact manifest tracking with stable canonical paths and readable by-node views.
+- Add `controller.py artifacts validate` for manifest, canonical artifact, by-node display, and gate snapshot checks.
+- Require explicit questioning and task-spec artifacts before advancing their workflow nodes.
+- Cover artifact layout, legacy migration, gate status validation, and repeated repair-loop artifacts in controller tests.
+
 ## 0.1.3
 
 - Add a Codex-native runtime controller with active task state, transition enforcement, gates, and resume packs.

@@ -32,7 +32,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.3 install --scope repo
+npx @bx-h/meta-flow@0.1.4 install --scope repo
 ```
 
 ## Quick Start
@@ -59,7 +59,7 @@ You can check installation state with:
 meta-flow doctor --scope repo
 ```
 
-Meta Flow keeps runtime state in `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, and `.meta-flow/tasks/<task-id>/`. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names.
+Meta Flow keeps runtime state in `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, and `.meta-flow/tasks/<task-id>/`. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names. Canonical artifacts stay under stable machine-readable names, while `artifact-index.json` and `artifacts/by-node/<order>-<phase>/<status>/` provide a readable node-by-node view with numbered subdirectories for repeated attempts.
 
 ## When To Use It
 
@@ -188,7 +188,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.3
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.4
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.
