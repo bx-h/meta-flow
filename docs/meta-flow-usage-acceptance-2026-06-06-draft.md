@@ -2,7 +2,7 @@
 
 # Meta-Flow Usage And Acceptance Draft
 
-> 注：`0.1.5` 后 runtime task state 默认位于 `~/.meta-flow`，CLI 入口优先使用 `meta-flow ...` / `metaflow ...`。本文中早期 workspace-local 表述只作为历史验收背景保留；新增或当前验收以 home runtime 和 by-node artifact contract 为准。
+> 注：`0.1.6` 后 runtime task state 默认位于 `~/.meta-flow`，CLI 入口优先使用 `meta-flow ...` / `metaflow ...`，QUESTIONING 阶段更倾向通过 clarification gate 询问用户。本文中早期 workspace-local 表述只作为历史验收背景保留；新增或当前验收以 home runtime、by-node artifact contract 和 clarification gate 为准。
 
 ## 1. 目的
 
@@ -416,7 +416,7 @@ $meta-workflow start: ...
 
 前置：
 
-- 源码是 `0.1.5`。
+- 源码是 `0.1.6`。
 - 已安装 plugin 或 marketplace 是 `0.1.1`。
 
 用户行为：
@@ -601,8 +601,8 @@ questioner 发现缺失信息，但可用假设继续。
 
 预期：
 
-- `questioning-report.json` 记录 assumptions。
-- 不打开 blocking gate。
+- 如果缺失信息会影响范围、验收、风险、UX、依赖或实现方向，即使不严格 blocking，也必须写入 `clarifying_questions` 并打开 `clarifying_questions` gate。
+- 只有低影响缺口可以不打开 gate；此时 `clarifying_questions` 必须为空，`can_continue_without_user_answer=true`，`questioning-report.json` 必须记录 assumptions。
 - 后续 proposal 必须引用这些假设。
 
 ### C3. Proposal confirmation 接受

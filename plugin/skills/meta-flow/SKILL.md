@@ -43,6 +43,7 @@ The controller output must drive the next response:
 - Do only the next bounded action.
 - Do not directly edit `state.phase`.
 - Write required artifacts to the by-node paths returned by the controller, validate them, then call `meta-flow advance`.
+- During `QUESTIONING`, bias toward asking the user: if `questioning-report.json` contains any `clarifying_questions`, or says `can_continue_without_user_answer=false`, open a `clarifying_questions` gate and wait for the user before `goal_contract_drafted`.
 - If a gate is open, ask for the user's decision and do not continue until the gate is decided.
 - If the controller rejects a transition, explain the blocker instead of skipping phases.
 
@@ -125,39 +126,40 @@ Stop conditions:
 
 2. Follow the controller `next_action`.
 3. Invoke `questioner`.
-4. If blocking questions exist, open or respect a user gate before continuing.
-5. Generate `questioning-report.json` and `goal-contract.json`.
-6. Validate it:
+4. If any meaningful user-answerable uncertainty could change scope, acceptance criteria, risk, UI/UX, dependencies, or implementation direction, put it in `clarifying_questions`, open a `clarifying_questions` gate, and ask the user before continuing. Do this even if the question is not strictly blocking.
+5. Only skip the clarification gate when `clarifying_questions` is empty, `can_continue_without_user_answer=true`, and `assumptions_if_user_does_not_answer` covers any remaining low-impact gaps.
+6. Generate `questioning-report.json` and `goal-contract.json`.
+7. Validate it:
 
    ```bash
    meta-flow validate goal-contract <path-from-controller> || python3 .meta-flow/scripts/validate_goal_contract.py <path-from-controller>
    ```
 
-7. Advance only through the controller:
+8. Advance only through the controller:
 
    ```bash
    meta-flow advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted."
    ```
 
-8. Enter the proposal drafting node before writing `proposal.md`:
+9. Enter the proposal drafting node before writing `proposal.md`:
 
    ```bash
    meta-flow advance <task-id> --event proposal_started --reason "Proposal research started." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event proposal_started --reason "Proposal research started."
    ```
 
-9. Invoke `researcher_proposer` to create `proposal.md`.
-10. Invoke `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer`, preferably in parallel when the user explicitly allows subagents.
-11. Run the mechanical aggregator:
+10. Invoke `researcher_proposer` to create `proposal.md`.
+11. Invoke `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer`; parallel review is allowed when the environment supports it.
+12. Run the mechanical aggregator:
 
    ```bash
    meta-flow aggregate-reviews --reviews-dir <task-dir>/reviews --output <path-from-controller> || python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <path-from-controller>
    ```
 
-12. Invoke `adjudicator`.
-13. Validate `adjudication-report.json`.
-14. Route through controller events such as `adjudication_accept`, `adjudication_revise`, or `adjudication_ask_user`.
-15. If the decision is `accept`, invoke `proposal_summarizer`.
-16. Show `proposal-summary.md` to the user, open a `proposal_confirmation` gate, and only after an `accept` gate decision call `proposal_accepted`.
+13. Invoke `adjudicator`.
+14. Validate `adjudication-report.json`.
+15. Route through controller events such as `adjudication_accept`, `adjudication_revise`, or `adjudication_ask_user`.
+16. If the decision is `accept`, invoke `proposal_summarizer`.
+17. Show `proposal-summary.md` to the user, open a `proposal_confirmation` gate, and only after an `accept` gate decision call `proposal_accepted`.
 
 ## Execution Phase Procedure
 

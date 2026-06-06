@@ -65,7 +65,7 @@ test("controller advances only through allowed transitions with required artifac
   assert.match(`${targetMissing.stdout}\n${targetMissing.stderr}`, /missing required artifacts: questioning-report\.json, goal-contract\.json/);
 
   const taskDir = path.join(root, "tasks", "T-auth");
-  await fs.writeFile(path.join(taskDir, "questioning-report.json"), "{}\n");
+  await writeQuestioningReport(taskDir);
   await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
 
   const advance = runController(root, ["advance", "--event", "goal_contract_drafted", "--reason", "Goal contract drafted.", "--format", "json"]);
@@ -86,6 +86,41 @@ test("controller advances only through allowed transitions with required artifac
   assert.equal(JSON.parse(artifactValidation.stdout).ok, true);
   const events = await fs.readFile(path.join(taskDir, "events.ndjson"), "utf8");
   assert.match(events, /goal_contract_drafted/);
+});
+
+test("controller requires a clarification gate when questioning report still has questions", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-questioning-gate-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Clarify realtime CLI", "--task-id", "T-clarify"]).status, 0);
+  const taskDir = path.join(root, "tasks", "T-clarify");
+
+  await writeQuestioningReport(taskDir, {
+    clarifying_questions: [{
+      question: "Should the first version include a TUI or only a watch command?",
+      why_it_matters: "This changes scope and dependencies.",
+      blocking: false
+    }],
+    assumptions_if_user_does_not_answer: ["Assume a watch command is enough."],
+    can_continue_without_user_answer: true
+  });
+  await writeJson(path.join(taskDir, "goal-contract.json"), {});
+
+  const withoutGate = runController(root, ["advance", "--event", "goal_contract_drafted"]);
+  assert.notEqual(withoutGate.status, 0);
+  assert.match(`${withoutGate.stdout}\n${withoutGate.stderr}`, /questioning requires user clarification/);
+  assert.match(`${withoutGate.stdout}\n${withoutGate.stderr}`, /clarifying_questions/);
+
+  const gate = runController(root, ["gate", "open", "--type", "clarifying_questions", "--prompt", "Should first version include TUI?", "--format", "json"]);
+  assert.equal(gate.status, 0, gate.stderr);
+  const openAdvance = runController(root, ["advance", "--event", "goal_contract_drafted"]);
+  assert.notEqual(openAdvance.status, 0);
+  assert.match(`${openAdvance.stdout}\n${openAdvance.stderr}`, /questioning requires user clarification/);
+
+  const gatePayload = JSON.parse(gate.stdout);
+  const decide = runController(root, ["gate", "decide", "--gate", gatePayload.gate_id, "--decision", "accept", "--comment", "Use watch command first.", "--format", "json"]);
+  assert.equal(decide.status, 0, decide.stderr);
+  const advance = runController(root, ["advance", "--event", "goal_contract_drafted", "--format", "json"]);
+  assert.equal(advance.status, 0, advance.stderr);
+  assert.equal(JSON.parse(advance.stdout).phase, "GOAL_CONTRACT_DRAFTED");
 });
 
 test("controller validates and migrates legacy tasks without artifact index", async () => {
@@ -186,7 +221,7 @@ test("controller requires adjudication report for adjudicator ask-user route", a
   assert.equal(runController(root, ["start", "Ask user from adjudication", "--task-id", "T-adjudication-ask"]).status, 0);
   const taskDir = path.join(root, "tasks", "T-adjudication-ask");
 
-  await writeArtifact(taskDir, "questioning-report.json", "{}\n");
+  await writeQuestioningReport(taskDir);
   await writeArtifact(taskDir, "goal-contract.json", "{}\n");
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
@@ -247,7 +282,7 @@ test("controller requires decided confirmation gates before user acceptance even
   assert.equal(runController(root, ["start", "Confirm proposal", "--task-id", "T-confirm"]).status, 0);
   const taskDir = path.join(root, "tasks", "T-confirm");
 
-  await fs.writeFile(path.join(taskDir, "questioning-report.json"), "{}\n");
+  await writeQuestioningReport(taskDir);
   await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
@@ -285,7 +320,7 @@ test("controller maintains artifact layout for main execution nodes", async () =
   assert.equal(runController(root, ["start", "Run full artifact layout", "--task-id", "T-artifacts"]).status, 0);
   const taskDir = path.join(root, "tasks", "T-artifacts");
 
-  await writeArtifact(taskDir, "questioning-report.json", "{}\n");
+  await writeQuestioningReport(taskDir);
   await writeArtifact(taskDir, "goal-contract.json", "{}\n");
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
@@ -353,7 +388,7 @@ test("controller keeps repeated loop artifacts distinct and records repair node 
   assert.equal(runController(root, ["start", "Repair loop artifacts", "--task-id", "T-loop"]).status, 0);
   const taskDir = path.join(root, "tasks", "T-loop");
 
-  await writeArtifact(taskDir, "questioning-report.json", "{}\n");
+  await writeQuestioningReport(taskDir);
   await writeArtifact(taskDir, "goal-contract.json", "{}\n");
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
@@ -431,6 +466,19 @@ function runController(root, args) {
 
 async function writeArtifact(taskDir, name, content) {
   await fs.writeFile(path.join(taskDir, name), content);
+}
+
+async function writeQuestioningReport(taskDir, overrides = {}) {
+  await writeJson(path.join(taskDir, "questioning-report.json"), {
+    task_id: path.basename(taskDir),
+    raw_user_request: "test request",
+    known_information: [],
+    missing_information: [],
+    clarifying_questions: [],
+    assumptions_if_user_does_not_answer: [],
+    can_continue_without_user_answer: true,
+    ...overrides
+  });
 }
 
 async function writeJson(filePath, data) {

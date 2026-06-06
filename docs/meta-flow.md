@@ -63,7 +63,7 @@ flowchart LR
 
 ## Agent Responsibilities
 
-`questioner` clarifies vague input and drafts `questioning-report.json` plus `goal-contract.json`. It asks at most five high-value questions and uses assumptions for non-blocking gaps.
+`questioner` clarifies vague input and drafts `questioning-report.json` plus `goal-contract.json`. It asks at most five high-value questions and should bias toward asking when uncertainty can change scope, acceptance criteria, risk, UX, dependencies, or implementation direction. Assumptions are reserved for truly low-impact gaps.
 
 `researcher_proposer` reads the goal contract, code, and docs, then writes `proposal.md`. It gives a recommended route, alternatives, tradeoffs, risks, and validation plan. It does not write code or change the goal contract.
 
@@ -253,7 +253,7 @@ The sample task lives at `.meta-flow/examples/sample-task/` and uses the request
 Walkthrough:
 
 1. Raw request is captured in `raw-request.md`.
-2. `questioner` records non-blocking uncertainties and drafts `questioning-report.json` plus `goal-contract.json`.
+2. `questioner` either opens a clarification gate for meaningful questions, or records low-impact assumptions and drafts `questioning-report.json` plus `goal-contract.json`.
 3. `researcher_proposer` writes a shallow `GET /healthz` proposal.
 4. Four reviewers pass the proposal and add scoped suggestions.
 5. `aggregate_reviews.py` writes `review-aggregate.json`.
@@ -267,7 +267,9 @@ Walkthrough:
 
 ## Common Failure Modes
 
-Infinite questioning: questioner asks low-value questions instead of separating blocking questions from assumptions. Limit to five high-value questions.
+Silent questioning skip: questioner records meaningful questions as non-blocking assumptions and advances without asking the user. Put meaningful questions in `clarifying_questions`; the controller requires a `clarifying_questions` gate before `goal_contract_drafted`.
+
+Infinite questioning: questioner asks low-value questions instead of separating meaningful questions from low-impact assumptions. Limit to five high-value questions.
 
 Generic reviewers: reviewers say "looks good" or "consider edge cases" without evidence. Require concrete issue lists and evidence refs.
 

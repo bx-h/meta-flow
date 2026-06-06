@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6
+
+- Require a `clarifying_questions` gate before `goal_contract_drafted` when `questioning-report.json` still contains meaningful questions or cannot safely continue without the user.
+- Bias the questioner instructions toward asking users about scope, acceptance, risk, UX, dependency, or implementation-direction uncertainty instead of silently assuming.
+- Keep parallel proposal review allowed while tightening only the QUESTIONING-stage clarification boundary.
+
 ## 0.1.5
 
 - Default runtime task state to `~/.meta-flow` so task products do not depend on the current repository directory.

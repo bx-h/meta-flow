@@ -93,7 +93,7 @@ NEXT_ACTION_BY_PHASE = {
     "QUESTIONING": {
         "kind": "role",
         "role": "questioner",
-        "instruction": "Resolve blocking questions or record assumptions, then produce questioning-report.json and goal-contract.json.",
+        "instruction": "Bias toward asking the user. If meaningful clarifying questions remain, open a clarifying_questions gate; only continue without a gate when questioning-report.json has no clarifying_questions and explicitly records safe assumptions.",
         "completion_event": "goal_contract_drafted",
     },
     "GOAL_CONTRACT_DRAFTED": {
@@ -306,6 +306,8 @@ REQUIRED_DECIDED_GATE_BY_EVENT = {
     "goal_adjustment_confirmed": {"types": ["goal_adjustment"], "decisions": ["accept"]},
     "final_accepted": {"types": ["final_confirmation"], "decisions": ["accept"]},
 }
+CLARIFICATION_GATE_TYPE = "clarifying_questions"
+CLARIFICATION_GATE_DECISIONS = {"accept", "revise"}
 
 
 def now() -> str:
@@ -891,6 +893,102 @@ def decided_gate_for_event(task_dir: Path, event: str) -> dict[str, Any] | None:
     return None
 
 
+def latest_decided_gate(task_dir: Path, gate_type: str, decisions: set[str] | None = None) -> dict[str, Any] | None:
+    gates_dir = task_dir / "gates"
+    if not gates_dir.exists():
+        return None
+    for path in sorted(gates_dir.glob("*.json"), reverse=True):
+        gate = load_json(path)
+        if not isinstance(gate, dict):
+            continue
+        if gate.get("status") != "decided":
+            continue
+        if gate.get("type") != gate_type:
+            continue
+        if decisions is not None and gate.get("decision") not in decisions:
+            continue
+        gate["path"] = str(path)
+        return gate
+    return None
+
+
+def questioning_report_for_advance(task_dir: Path) -> tuple[dict[str, Any], Path]:
+    index = load_artifact_index(task_dir)
+    occurrence = artifact_occurrence(index, "QUESTIONING", "done", "questioning-report.json")
+    expected_path = display_artifact_path(
+        task_dir,
+        "QUESTIONING",
+        "done",
+        "questioning-report.json",
+        occurrence,
+        "goal_contract_drafted",
+    )
+    path = latest_existing_path([expected_path, *artifact_candidates(task_dir, "questioning-report.json")])
+    if not path:
+        raise SystemExit("Cannot advance with goal_contract_drafted; missing required artifact: questioning-report.json")
+    data = load_json(path)
+    if not isinstance(data, dict):
+        raise SystemExit("Cannot advance with goal_contract_drafted; questioning-report.json must be an object")
+    return data, path
+
+
+def non_empty_items(value: Any) -> bool:
+    return isinstance(value, list) and any(item for item in value)
+
+
+def questioning_report_gate_reasons(report: dict[str, Any]) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    reasons: list[str] = []
+    clarifying_questions = report.get("clarifying_questions")
+    missing_information = report.get("missing_information")
+    assumptions = report.get("assumptions_if_user_does_not_answer")
+    can_continue = report.get("can_continue_without_user_answer")
+
+    if not isinstance(clarifying_questions, list):
+        errors.append("clarifying_questions must be a list")
+    elif non_empty_items(clarifying_questions):
+        reasons.append("clarifying_questions is not empty")
+
+    if not isinstance(missing_information, list):
+        errors.append("missing_information must be a list")
+    if not isinstance(assumptions, list):
+        errors.append("assumptions_if_user_does_not_answer must be a list")
+
+    if not isinstance(can_continue, bool):
+        errors.append("can_continue_without_user_answer must be a boolean")
+    elif can_continue is False:
+        reasons.append("can_continue_without_user_answer is false")
+
+    if (
+        isinstance(missing_information, list)
+        and non_empty_items(missing_information)
+        and can_continue is True
+        and isinstance(assumptions, list)
+        and not non_empty_items(assumptions)
+    ):
+        reasons.append("missing_information exists without assumptions_if_user_does_not_answer")
+
+    return errors, reasons
+
+
+def enforce_questioning_clarification_gate(task_dir: Path, event: str) -> None:
+    if event != "goal_contract_drafted":
+        return
+    report, path = questioning_report_for_advance(task_dir)
+    errors, reasons = questioning_report_gate_reasons(report)
+    if errors:
+        raise SystemExit(f"Cannot advance with {event}; invalid {relative_to_task(task_dir, path)}: {', '.join(errors)}")
+    if not reasons:
+        return
+    if latest_decided_gate(task_dir, CLARIFICATION_GATE_TYPE, CLARIFICATION_GATE_DECISIONS):
+        return
+    reason_text = "; ".join(reasons)
+    raise SystemExit(
+        f"Cannot advance with {event}; questioning requires user clarification ({reason_text}). "
+        f"Open a {CLARIFICATION_GATE_TYPE} gate, ask the user, record the decision, then update artifacts or advance."
+    )
+
+
 def enforce_gate_requirements(task_dir: Path, event: str) -> None:
     gate = open_gate(task_dir)
     if gate and event != "block":
@@ -1161,6 +1259,7 @@ def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: st
     missing = missing_required_artifacts(task_dir, event, previous)
     if missing:
         raise SystemExit(f"Cannot advance with {event}; missing required artifacts: {', '.join(missing)}")
+    enforce_questioning_clarification_gate(task_dir, event)
     enforce_gate_requirements(task_dir, event)
     enforce_loop_limits(state, event)
     recorded_refs = record_artifacts_for_event(task_dir, event, previous, "done", timestamp)
