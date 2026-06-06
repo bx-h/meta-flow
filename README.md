@@ -61,6 +61,8 @@ meta-flow doctor --scope repo
 
 Meta Flow keeps runtime state in `~/.meta-flow/active-task.json`, `~/.meta-flow/task-index.json`, and `~/.meta-flow/tasks/<task-id>/` by default. Override with `META_FLOW_ROOT` or command-scoped `--root <path>` such as `meta-flow status --root <path>` only when you intentionally want an isolated runtime. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names. Business artifacts live under stable by-node machine paths such as `artifacts/by-node/<order>-<phase>/<status>/<artifact>`, and `artifact-index.json` records the contract, hash, event, node, and retry metadata.
 
+To stop a task because the user no longer wants to continue it, run `meta-flow abandon [task-id] --reason "<why>"`. This marks the task `abandoned`, removes the active resume pointer, closes open gates as aborted, updates the task index, and keeps artifacts for audit. `meta-flow deactivate [task-id]` is weaker: it only clears `active-task.json` and leaves the task state unchanged, which is useful for context switching but not for abandonment.
+
 ## When To Use It
 
 - Vague requests.

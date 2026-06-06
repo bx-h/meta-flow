@@ -48,6 +48,64 @@ test("controller starts active task and emits resume payloads", async () => {
   assert.match(codex.stdout, /Tell the user the current user-facing stage/);
 });
 
+test("controller distinguishes abandon from deactivate", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-abandon-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Stop this work", "--task-id", "T-abandon"]).status, 0);
+
+  const open = runController(root, ["gate", "open", "--type", "clarifying_questions", "--prompt", "Continue?", "--format", "json"]);
+  assert.equal(open.status, 0, open.stderr);
+  const gate = JSON.parse(open.stdout);
+
+  const abandoned = runController(root, ["abandon", "--reason", "User cancelled.", "--format", "json"]);
+  assert.equal(abandoned.status, 0, abandoned.stderr);
+  const payload = JSON.parse(abandoned.stdout);
+  assert.equal(payload.task_id, "T-abandon");
+  assert.equal(payload.status, "abandoned");
+  assert.equal(payload.phase, "ABANDONED");
+  assert.equal(payload.open_gate, null);
+  assert.equal(payload.next_action.role, "none");
+  assert.equal(await exists(path.join(root, "active-task.json")), false);
+
+  const taskDir = path.join(root, "tasks", "T-abandon");
+  const state = await readJson(path.join(taskDir, "state.json"));
+  assert.equal(state.status, "abandoned");
+  assert.equal(state.phase, "ABANDONED");
+  assert.equal(state.last_route_decision, "User cancelled.");
+
+  const gateState = await readJson(path.join(taskDir, "gates", `${gate.gate_id}.json`));
+  assert.equal(gateState.status, "decided");
+  assert.equal(gateState.decision, "abort");
+
+  const index = await readJson(path.join(root, "task-index.json"));
+  assert.equal(index.tasks.find((entry) => entry.task_id === "T-abandon").status, "abandoned");
+  assert.equal(index.tasks.find((entry) => entry.task_id === "T-abandon").phase, "ABANDONED");
+
+  const events = await fs.readFile(path.join(taskDir, "events.ndjson"), "utf8");
+  assert.match(events, /gate_decided/);
+  assert.match(events, /task_abandoned/);
+
+  const validation = runController(root, ["artifacts", "validate", "T-abandon", "--format", "json"]);
+  assert.equal(validation.status, 0, validation.stderr);
+  assert.equal(JSON.parse(validation.stdout).ok, true);
+
+  const noActive = runController(root, ["resume", "--format", "json"]);
+  assert.notEqual(noActive.status, 0);
+  assert.match(`${noActive.stdout}\n${noActive.stderr}`, /No active meta-flow task/);
+
+  assert.equal(runController(root, ["start", "Deactivate only", "--task-id", "T-deactivate"]).status, 0);
+  const deactivated = runController(root, ["deactivate"]);
+  assert.equal(deactivated.status, 0, deactivated.stderr);
+  assert.equal(await exists(path.join(root, "active-task.json")), false);
+
+  const deactivatedState = await readJson(path.join(root, "tasks", "T-deactivate", "state.json"));
+  assert.equal(deactivatedState.status, "active");
+  assert.equal(deactivatedState.phase, "QUESTIONING");
+  const updatedIndex = await readJson(path.join(root, "task-index.json"));
+  const deactivatedIndex = updatedIndex.tasks.find((entry) => entry.task_id === "T-deactivate");
+  assert.equal(deactivatedIndex.status, "active");
+  assert.equal(deactivatedIndex.phase, "QUESTIONING");
+});
+
 test("controller advances only through allowed transitions with required artifacts", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-advance-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Improve auth", "--task-id", "T-auth"]).status, 0);

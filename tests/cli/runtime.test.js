@@ -47,6 +47,23 @@ test("runtime CLI supports explicit root and package bin alias", async () => {
   assert.equal(await exists(path.join(root, "tasks", "T-root", "state.json")), true);
 });
 
+test("runtime CLI exposes abandon command", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-abandon-runtime-test-")), "runtime");
+  const start = spawnSync("node", [CLI, "start", "Abandon through CLI", "--task-id", "T-cli-abandon", "--root", root], {
+    encoding: "utf8"
+  });
+  assert.equal(start.status, 0, start.stderr);
+
+  const abandon = spawnSync("node", [CLI, "abandon", "--root", root, "--reason", "No longer needed.", "--format", "json"], {
+    encoding: "utf8"
+  });
+  assert.equal(abandon.status, 0, abandon.stderr);
+  const payload = JSON.parse(abandon.stdout);
+  assert.equal(payload.status, "abandoned");
+  assert.equal(payload.phase, "ABANDONED");
+  assert.equal(await exists(path.join(root, "active-task.json")), false);
+});
+
 test("direct python helpers do not create __pycache__", async () => {
   const pycache = path.resolve("plugin", "scripts", "__pycache__");
   await fs.rm(pycache, { recursive: true, force: true });

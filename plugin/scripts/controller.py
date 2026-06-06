@@ -49,6 +49,7 @@ PHASE_SEQUENCE = [
     "USER_FINAL_CONFIRMATION",
     "DONE",
     "BLOCKED",
+    "ABANDONED",
 ]
 
 PHASE_ORDER = {phase: index + 1 for index, phase in enumerate(PHASE_SEQUENCE)}
@@ -81,6 +82,7 @@ PHASE_LABELS = {
     "USER_FINAL_CONFIRMATION": "等待最终确认",
     "DONE": "已完成",
     "BLOCKED": "已阻塞",
+    "ABANDONED": "已放弃",
 }
 
 NEXT_ACTION_BY_PHASE = {
@@ -238,6 +240,12 @@ NEXT_ACTION_BY_PHASE = {
         "kind": "blocked",
         "role": "user",
         "instruction": "Ask the user for an unblock decision.",
+        "completion_event": "",
+    },
+    "ABANDONED": {
+        "kind": "done",
+        "role": "none",
+        "instruction": "The user abandoned this task. Do not continue it unless the user explicitly starts or selects another task.",
         "completion_event": "",
     },
 }
@@ -683,6 +691,79 @@ def deactivate_task(root: Path, task_id: str) -> None:
         path.unlink()
 
 
+def close_open_gates_for_abandon(task_dir: Path, reason: str, timestamp: str) -> list[str]:
+    gates_dir = task_dir / "gates"
+    if not gates_dir.exists():
+        return []
+    refs = []
+    for path in sorted(gates_dir.glob("*.json")):
+        gate = load_json(path)
+        if not isinstance(gate, dict) or gate.get("status") != "open":
+            continue
+        gate["status"] = "decided"
+        gate["decision"] = "abort"
+        gate["comment"] = reason
+        gate["decided_at"] = timestamp
+        write_json(path, gate)
+        ref = record_gate_artifact(task_dir, gate, "decided", "gate_decided", timestamp)
+        refs.append(ref)
+        phase = gate.get("phase") if isinstance(gate.get("phase"), str) else "UNKNOWN"
+        write_event(
+            task_dir,
+            {
+                "at": timestamp,
+                "actor": "controller",
+                "event": "gate_decided",
+                "from_phase": phase,
+                "to_phase": phase,
+                "reason": reason,
+                "artifact_refs": [ref],
+            },
+        )
+    return refs
+
+
+def abandon_task(root: Path, task_dir: Path, reason: str) -> dict[str, Any]:
+    state = load_state(task_dir)
+    task_id = state.get("task_id", task_dir.name)
+    if state.get("status") == "abandoned" or state.get("phase") == "ABANDONED":
+        deactivate_task(root, task_id)
+        update_index(root, state, task_dir)
+        return status_payload(task_dir)
+
+    timestamp = now()
+    previous = state.get("phase", "UNKNOWN")
+    resolved_reason = reason or "Task abandoned by user."
+    gate_refs = close_open_gates_for_abandon(task_dir, resolved_reason, timestamp)
+
+    state["phase"] = "ABANDONED"
+    state["updated_at"] = timestamp
+    state["status"] = "abandoned"
+    state["last_route_decision"] = resolved_reason
+    state.setdefault("history", []).append({
+        "at": timestamp,
+        "from_phase": previous,
+        "to_phase": "ABANDONED",
+        "reason": resolved_reason,
+    })
+    write_json(task_dir / "state.json", state)
+    write_event(
+        task_dir,
+        {
+            "at": timestamp,
+            "actor": "controller",
+            "event": "task_abandoned",
+            "from_phase": previous,
+            "to_phase": "ABANDONED",
+            "reason": resolved_reason,
+            "artifact_refs": gate_refs,
+        },
+    )
+    update_index(root, state, task_dir)
+    deactivate_task(root, task_id)
+    return status_payload(task_dir)
+
+
 def initial_state(task_id: str, timestamp: str) -> dict[str, Any]:
     return {
         "task_id": task_id,
@@ -1125,6 +1206,8 @@ def allowed_user_actions(phase: str, gate: dict[str, Any] | None) -> list[str]:
         return ["接受", "拒绝", "修改目标", "暂停"]
     if phase in {"DONE"}:
         return ["开始新任务", "查看最终报告"]
+    if phase in {"ABANDONED"}:
+        return ["开始新任务", "查看保留产物"]
     if phase in {"BLOCKED"}:
         return ["提供解除阻塞信息", "调整目标", "暂停"]
     return ["继续", "查看状态", "暂停"]
@@ -1734,7 +1817,12 @@ def build_parser() -> argparse.ArgumentParser:
     artifacts_validate.add_argument("task", nargs="?", help="Task id or task directory.")
     artifacts_validate.add_argument("--format", choices=["text", "json"], default="text")
 
-    deactivate = subparsers.add_parser("deactivate", help="Deactivate the active task.")
+    abandon = subparsers.add_parser("abandon", help="Abandon a task and keep its artifacts for audit.")
+    abandon.add_argument("task", nargs="?", help="Task id or task directory.")
+    abandon.add_argument("--reason", default="", help="Reason for abandoning the task.")
+    abandon.add_argument("--format", choices=["text", "json", "codex"], default="text")
+
+    deactivate = subparsers.add_parser("deactivate", help="Deactivate the active task without changing task state.")
     deactivate.add_argument("task", nargs="?", help="Task id or task directory.")
 
     return parser
@@ -1778,6 +1866,13 @@ def main(argv: list[str] | None = None) -> int:
             result = validate_artifacts(task_dir)
             render_artifact_validation(result, args.format)
             return 0 if result["ok"] else 1
+    if args.command == "abandon":
+        payload = abandon_task(root, resolve_task_dir(root, args.task), args.reason)
+        if args.format == "text":
+            print(f"abandoned: {payload['task_id']}")
+        else:
+            render_payload(payload, args.format)
+        return 0
     if args.command == "deactivate":
         task_dir = resolve_task_dir(root, args.task)
         state = load_state(task_dir)

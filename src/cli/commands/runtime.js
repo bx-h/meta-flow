@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { helpRequested } from "../lib/args.js";
 import { pluginSource } from "../lib/paths.js";
 
-const CONTROLLER_COMMANDS = new Set(["start", "resume", "status", "advance", "gate", "artifacts", "deactivate"]);
+const CONTROLLER_COMMANDS = new Set(["start", "resume", "status", "advance", "gate", "artifacts", "abandon", "deactivate"]);
 const VALIDATE_SCRIPTS = {
   "goal-contract": "validate_goal_contract.py",
   adjudication: "validate_adjudication.py",
@@ -23,7 +23,8 @@ Runtime commands:
   advance [task] --event <event> Advance through a controller-approved event.
   gate open|decide ...           Open or decide a human gate.
   artifacts validate [task]      Validate artifact index and by-node layout.
-  deactivate [task]              Deactivate the active task.
+  abandon [task]                 Abandon a task and keep artifacts for audit.
+  deactivate [task]              Only clear the active task pointer.
   validate <kind> [path]         Validate an artifact file.
   aggregate-reviews [options]    Aggregate reviewer reports.
 

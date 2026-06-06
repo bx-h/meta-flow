@@ -256,6 +256,7 @@ meta-flow status --format json
 meta-flow advance <task-id> --event <event> --reason <reason>
 meta-flow gate open --type proposal_confirmation ...
 meta-flow gate decide --gate <id> --decision accept|reject --comment ...
+meta-flow abandon <task-id> --reason <reason>
 meta-flow deactivate <task-id>
 ```
 

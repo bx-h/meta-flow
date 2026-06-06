@@ -51,6 +51,8 @@ Commands:
   advance       Advance through an allowed workflow event.
   gate          Open or decide a human gate.
   artifacts     Validate artifact layout.
+  abandon       Mark a workflow task as abandoned.
+  deactivate    Clear the active workflow task pointer.
   validate      Validate a workflow artifact file.
   aggregate-reviews
                 Aggregate reviewer reports.

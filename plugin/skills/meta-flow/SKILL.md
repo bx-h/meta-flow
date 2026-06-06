@@ -37,6 +37,14 @@ Fallback command forms:
 - `validate task-verification`: `python3 .meta-flow/scripts/validate_task_verification.py <path>`
 - `aggregate-reviews`: `python3 .meta-flow/scripts/aggregate_reviews.py ...`
 
+To stop working on a task without deleting audit artifacts, run:
+
+```bash
+meta-flow abandon [task-id] --reason "<why>" || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow abandon [task-id] --reason "<why>"
+```
+
+Use `deactivate` only to clear the active-task pointer without changing the task state, for example when switching context. Use `abandon` when the user explicitly does not want to continue the task.
+
 The controller output must drive the next response:
 
 - Tell the user the current user-facing stage.
@@ -115,6 +123,7 @@ Stop conditions:
 - Concrete task repair: max 2 rounds per task.
 - Direction adjustment: max 2 rounds.
 - When a limit is exceeded, generate a blocked report and ask the user for a decision.
+- If the user abandons the task, call `meta-flow abandon` so the task state becomes `abandoned`, active resume stops, and artifacts remain available for audit.
 
 ## Proposal Phase Procedure
 
