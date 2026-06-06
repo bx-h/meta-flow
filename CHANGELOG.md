@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10
+
+- Add a task-level `delegation_authorization` user gate before spawned role work, so user authorization for sub-agents/delegation/parallel agent work is explicit and recorded in task state.
+- Block direct `advance` attempts for role events until delegation authorization is accepted, preventing prompt-only delegation rules from being bypassed.
+- Block the task when delegation authorization is rejected instead of allowing the main agent to emulate workflow roles locally.
+- Update Skill, persistent AGENTS guidance, docs, and tests for the delegation authorization gate.
+
 ## 0.1.9
 
 - Make role delegation an explicit runtime contract: controller resume packs now mark role phases as `spawn_agent_required` and list required custom agents.

@@ -11,6 +11,14 @@
   "max_proposal_rework_rounds": 3,
   "max_task_repair_rounds": 2,
   "max_direction_adjustment_rounds": 2,
+  "delegation_authorization": {
+    "status": "pending",
+    "gate_id": null,
+    "decision": null,
+    "comment": "",
+    "authorized_at": null,
+    "denied_at": null
+  },
   "status": "active",
   "last_route_decision": "Raw request captured; goal clarification started.",
   "history": [

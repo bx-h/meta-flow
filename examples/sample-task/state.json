@@ -10,6 +10,14 @@
   "max_proposal_rework_rounds": 3,
   "max_task_repair_rounds": 2,
   "max_direction_adjustment_rounds": 2,
+  "delegation_authorization": {
+    "status": "approved",
+    "gate_id": "20260605-000001-delegation-authorization",
+    "decision": "accept",
+    "comment": "Allow spawned role agents for the sample task.",
+    "authorized_at": "2026-06-05T00:00:01Z",
+    "denied_at": null
+  },
   "status": "done",
   "last_route_decision": "All milestone checks passed; final summary accepted.",
   "history": [

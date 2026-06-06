@@ -29,8 +29,8 @@ npm publish --access public
 The release workflow is triggered by tags:
 
 ```bash
-git tag v0.1.9
-git push origin v0.1.9
+git tag v0.1.10
+git push origin v0.1.10
 ```
 
 It runs CI, creates an npm pack tarball, computes SHA256, publishes to npm, and creates a GitHub Release.
@@ -53,7 +53,7 @@ Release notes should cite `CHANGELOG.md`. Upload:
 Document pinned installs:
 
 ```bash
-npx @bx-h/meta-flow@0.1.9 install --scope repo
+npx @bx-h/meta-flow@0.1.10 install --scope repo
 ```
 
 ## Codex Marketplace Distribution
@@ -61,7 +61,7 @@ npx @bx-h/meta-flow@0.1.9 install --scope repo
 You can distribute through marketplace metadata:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.9
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.10
 ```
 
 The npm installer still performs custom-agent installation and validation support, so do not rely on marketplace installation alone unless Codex gains first-class agent-template loading.

@@ -32,7 +32,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.9 install --scope repo
+npx @bx-h/meta-flow@0.1.10 install --scope repo
 ```
 
 ## Quick Start
@@ -60,6 +60,8 @@ meta-flow doctor --scope repo
 ```
 
 Meta Flow keeps runtime state in `~/.meta-flow/active-task.json`, `~/.meta-flow/task-index.json`, and `~/.meta-flow/tasks/<task-id>/` by default. Override with `META_FLOW_ROOT` or command-scoped `--root <path>` such as `meta-flow status --root <path>` only when you intentionally want an isolated runtime. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names. Business artifacts live under stable by-node machine paths such as `artifacts/by-node/<order>-<phase>/<status>/<artifact>`, and `artifact-index.json` records the contract, hash, event, node, and retry metadata.
+
+Before the first spawned role runs, the controller opens a one-time `delegation_authorization` gate. The user must explicitly accept sub-agents/delegation/parallel agent work for that task; the accepted gate is recorded in `state.json` and reused for later role nodes. If the user rejects it, the task is blocked instead of letting the main agent act as a local substitute.
 
 Role phases are delegated work, not local personas. When the controller reports `spawn_agent_required`, the main agent must spawn the listed custom agent(s), such as `product_reviewer`, `technical_reviewer`, `risk_reviewer`, `verification_reviewer`, or `adjudicator`. If spawning is unavailable or rejected, the workflow must stop and report that blocker instead of doing the role locally.
 
@@ -190,7 +192,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.9
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.10
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.

@@ -374,6 +374,8 @@ REQUIRED_DECIDED_GATE_BY_EVENT = {
 }
 CLARIFICATION_GATE_TYPE = "clarifying_questions"
 CLARIFICATION_GATE_DECISIONS = {"accept", "revise"}
+DELEGATION_GATE_TYPE = "delegation_authorization"
+DELEGATION_GATE_ACCEPT_DECISIONS = {"accept"}
 
 
 def now() -> str:
@@ -839,6 +841,7 @@ def initial_state(task_id: str, timestamp: str) -> dict[str, Any]:
         "max_proposal_rework_rounds": 3,
         "max_task_repair_rounds": 2,
         "max_direction_adjustment_rounds": 2,
+        "delegation_authorization": default_delegation_authorization(),
         "status": "active",
         "last_route_decision": "Raw request captured; goal clarification started.",
         "history": [
@@ -1162,6 +1165,58 @@ def decided_gate_for_event(task_dir: Path, event: str) -> dict[str, Any] | None:
     return None
 
 
+def default_delegation_authorization() -> dict[str, Any]:
+    return {
+        "status": "pending",
+        "gate_id": None,
+        "decision": None,
+        "comment": "",
+        "authorized_at": None,
+        "denied_at": None,
+    }
+
+
+def delegation_authorization(state: dict[str, Any]) -> dict[str, Any]:
+    authorization = state.get("delegation_authorization")
+    if isinstance(authorization, dict):
+        result = default_delegation_authorization()
+        result.update(authorization)
+        return result
+    return default_delegation_authorization()
+
+
+def delegation_authorized(state: dict[str, Any]) -> bool:
+    return delegation_authorization(state).get("status") == "approved"
+
+
+def action_requires_delegation(action: dict[str, Any]) -> bool:
+    return bool(action.get("kind") == "role" and ROLE_AGENT_NAMES.get(action.get("role")))
+
+
+def phase_requires_delegation(phase: str | None) -> bool:
+    if not isinstance(phase, str):
+        return False
+    return action_requires_delegation(NEXT_ACTION_BY_PHASE.get(phase, {}))
+
+
+def event_requires_delegation(event: str, from_phase: str | None) -> bool:
+    if event == "start_questioning":
+        return False
+    if not phase_requires_delegation(from_phase):
+        return False
+    return event in completion_events_for_phase(str(from_phase)) or event == "block"
+
+
+def delegation_authorization_prompt(action: dict[str, Any]) -> str:
+    agents = ROLE_AGENT_NAMES.get(action.get("role"), [])
+    listed_agents = ", ".join(agents) if agents else "required role agents"
+    return (
+        "This meta-flow task requires explicit user authorization to use sub-agents/delegation/parallel agent work "
+        f"for workflow roles. Accept to authorize spawning these required role agent(s) for this task: {listed_agents}. "
+        "Reject or abort to block the task; the main agent must not perform these roles locally."
+    )
+
+
 def latest_decided_gate(task_dir: Path, gate_type: str, decisions: set[str] | None = None) -> dict[str, Any] | None:
     gates_dir = task_dir / "gates"
     if not gates_dir.exists():
@@ -1255,6 +1310,21 @@ def enforce_questioning_clarification_gate(task_dir: Path, event: str) -> None:
     raise SystemExit(
         f"Cannot advance with {event}; questioning requires user clarification ({reason_text}). "
         f"Open a {CLARIFICATION_GATE_TYPE} gate, ask the user, record the decision, then update artifacts or advance."
+    )
+
+
+def enforce_delegation_authorization(task_dir: Path, event: str, from_phase: str | None) -> None:
+    if not event_requires_delegation(event, from_phase):
+        return
+    state = load_state(task_dir)
+    if delegation_authorized(state):
+        return
+    authorization = delegation_authorization(state)
+    gate_id = authorization.get("gate_id")
+    gate_hint = f" gate {gate_id}" if isinstance(gate_id, str) and gate_id else f" {DELEGATION_GATE_TYPE} gate"
+    raise SystemExit(
+        f"Cannot advance with {event}; explicit user authorization for sub-agents/delegation is required first. "
+        f"Ask the user to accept{gate_hint}; do not perform this role locally."
     )
 
 
@@ -1359,6 +1429,27 @@ def expected_artifacts_for_next_action(phase: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def ensure_delegation_authorization_gate(task_dir: Path, state: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+    existing = open_gate(task_dir)
+    if existing:
+        return existing
+    gate = open_gate_command(task_dir, DELEGATION_GATE_TYPE, delegation_authorization_prompt(action))
+    state = load_state(task_dir)
+    authorization = delegation_authorization(state)
+    authorization.update({
+        "status": "pending",
+        "gate_id": gate["gate_id"],
+        "decision": None,
+        "comment": "",
+        "authorized_at": None,
+        "denied_at": None,
+    })
+    state["delegation_authorization"] = authorization
+    state["updated_at"] = gate["opened_at"]
+    write_json(task_dir / "state.json", state)
+    return gate
+
+
 def status_payload(task_dir: Path) -> dict[str, Any]:
     state = load_state(task_dir)
     phase = state.get("phase", "UNKNOWN")
@@ -1371,12 +1462,23 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
             "completion_event": "gate_decided",
         })
     else:
-        next_action = enrich_next_action(NEXT_ACTION_BY_PHASE.get(phase, {
+        base_next_action = NEXT_ACTION_BY_PHASE.get(phase, {
             "kind": "inspect",
             "role": "main_agent",
             "instruction": "Inspect state.json and route manually.",
             "completion_event": "",
-        }))
+        })
+        if action_requires_delegation(base_next_action) and not delegation_authorized(state):
+            gate = ensure_delegation_authorization_gate(task_dir, state, base_next_action)
+            next_action = enrich_next_action({
+                "kind": "gate",
+                "role": "user",
+                "instruction": "Ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this meta-flow task before spawning any role agent.",
+                "completion_event": "gate_decided",
+            })
+        else:
+            next_action = enrich_next_action(base_next_action)
+    state = load_state(task_dir)
     return {
         "task_id": state.get("task_id", task_dir.name),
         "task_dir": str(task_dir),
@@ -1386,6 +1488,7 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
         "current_milestone_id": state.get("current_milestone_id"),
         "current_task_id": state.get("current_task_id"),
         "last_route_decision": state.get("last_route_decision", ""),
+        "delegation_authorization": delegation_authorization(state),
         "open_gate": gate,
         "next_action": next_action,
         "allowed_user_actions": allowed_user_actions(phase, gate),
@@ -1427,6 +1530,8 @@ def enrich_next_action(action: dict[str, Any]) -> dict[str, Any]:
 
 def allowed_user_actions(phase: str, gate: dict[str, Any] | None) -> list[str]:
     if gate:
+        if gate.get("type") == DELEGATION_GATE_TYPE:
+            return ["授权 sub-agent/delegation", "拒绝并阻塞任务", "暂停"]
         return ["接受", "拒绝", "修改目标", "暂停"]
     if phase in {"DONE"}:
         return ["开始新任务", "查看最终报告"]
@@ -1444,6 +1549,7 @@ def print_text(payload: dict[str, Any]) -> None:
     print(f"current milestone: {payload['current_milestone_id']}")
     print(f"current task: {payload['current_task_id']}")
     print(f"last route decision: {payload['last_route_decision']}")
+    print(f"delegation authorization: {payload['delegation_authorization'].get('status')}")
     print(f"next action execution mode: {payload['next_action'].get('execution_mode')}")
     if payload["next_action"].get("required_agents"):
         print(f"required spawned agents: {', '.join(payload['next_action']['required_agents'])}")
@@ -1474,6 +1580,7 @@ def print_codex(payload: dict[str, Any]) -> None:
     print(f"Current milestone: {payload['current_milestone_id']}")
     print(f"Current task: {payload['current_task_id']}")
     print(f"Last route decision: {payload['last_route_decision']}")
+    print(f"Delegation authorization: {payload['delegation_authorization'].get('status')}")
     print(f"Next action role: {payload['next_action']['role']}")
     print(f"Next action: {payload['next_action']['instruction']}")
     print(f"Completion event after the bounded step: {payload['next_action']['completion_event']}")
@@ -1500,6 +1607,7 @@ def print_codex(payload: dict[str, Any]) -> None:
     print("Instructions for Codex:")
     print("- Tell the user the current user-facing stage before doing work.")
     print("- Do only the next bounded action described above.")
+    print("- If a delegation_authorization gate is open, ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this task before spawning role agents.")
     print("- For spawn_agent_required actions, spawn the required custom agent(s); the main agent is only the orchestrator.")
     print("- Do not locally emulate meta-flow roles such as questioner, reviewers, adjudicator, planner, executor, verifier, or summarizers.")
     print("- If the spawn/subagent tool is unavailable or rejects delegation, stop and report the blocker instead of continuing locally.")
@@ -1578,6 +1686,7 @@ def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: st
     timestamp = now()
     if event == "goal_contract_drafted":
         ensure_legacy_questioning_report(task_dir, timestamp)
+    enforce_delegation_authorization(task_dir, event, previous)
     missing = missing_required_artifacts(task_dir, event, previous)
     if missing:
         raise SystemExit(f"Cannot advance with {event}; missing required artifacts: {', '.join(missing)}")
@@ -1657,7 +1766,52 @@ def open_gate_command(task_dir: Path, gate_type: str, prompt: str) -> dict[str, 
     return gate
 
 
-def decide_gate_command(task_dir: Path, gate_id: str, decision: str, comment: str) -> dict[str, Any]:
+def apply_delegation_gate_decision(root: Path, task_dir: Path, gate: dict[str, Any], decision: str, comment: str, timestamp: str) -> None:
+    if gate.get("type") != DELEGATION_GATE_TYPE:
+        return
+    state = load_state(task_dir)
+    previous = state.get("phase", "UNKNOWN")
+    authorization = delegation_authorization(state)
+    authorization.update({
+        "gate_id": gate.get("gate_id"),
+        "decision": decision,
+        "comment": comment,
+    })
+    if decision in DELEGATION_GATE_ACCEPT_DECISIONS:
+        authorization["status"] = "approved"
+        authorization["authorized_at"] = timestamp
+        authorization["denied_at"] = None
+        state["last_route_decision"] = "User authorized spawned role agents for this meta-flow task."
+    else:
+        authorization["status"] = "denied"
+        authorization["authorized_at"] = None
+        authorization["denied_at"] = timestamp
+        state["phase"] = "BLOCKED"
+        state["status"] = "blocked"
+        state["last_route_decision"] = "User did not authorize spawned role agents; workflow blocked."
+        state.setdefault("history", []).append({
+            "at": timestamp,
+            "from_phase": previous,
+            "to_phase": "BLOCKED",
+            "reason": state["last_route_decision"],
+        })
+    state["delegation_authorization"] = authorization
+    state["updated_at"] = timestamp
+    write_json(task_dir / "state.json", state)
+    write_event(task_dir, {
+        "at": timestamp,
+        "actor": "controller",
+        "event": "delegation_authorization_updated",
+        "from_phase": previous,
+        "to_phase": state.get("phase", previous),
+        "reason": state["last_route_decision"],
+        "artifact_refs": [],
+    })
+    update_index(root, state, task_dir)
+    set_active_task(root, state, task_dir)
+
+
+def decide_gate_command(root: Path, task_dir: Path, gate_id: str, decision: str, comment: str) -> dict[str, Any]:
     path = task_dir / "gates" / f"{gate_id}.json"
     if not path.exists():
         raise SystemExit(f"Gate not found: {gate_id}")
@@ -1681,6 +1835,7 @@ def decide_gate_command(task_dir: Path, gate_id: str, decision: str, comment: st
         "reason": f"{decision}: {comment}".strip(),
         "artifact_refs": [artifact_ref],
     })
+    apply_delegation_gate_decision(root, task_dir, gate, decision, comment, timestamp)
     return gate
 
 
@@ -2110,7 +2265,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.gate_command == "open":
             result = open_gate_command(task_dir, args.type, args.prompt)
         else:
-            result = decide_gate_command(task_dir, args.gate, args.decision, args.comment)
+            result = decide_gate_command(root, task_dir, args.gate, args.decision, args.comment)
         if args.format == "json":
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

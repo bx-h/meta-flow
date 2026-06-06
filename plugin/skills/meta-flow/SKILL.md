@@ -51,7 +51,8 @@ The controller output must drive the next response:
 - Do only the next bounded action.
 - Treat `spawn_agent_required` as a hard delegation contract. The main agent is the orchestrator, not a local substitute for workflow roles.
 - When the controller lists `required_agents`, spawn those exact custom agent(s). If spawning is unavailable, blocked by tool policy, or not possible in the current surface, stop and tell the user; do not perform the role locally.
-- Using `$meta-flow` or `meta-flow start/resume` is explicit authorization to spawn the required role agents for this workflow. Do not ask for extra permission before spawning required role agents unless the user explicitly disabled delegation.
+- `$meta-flow` or `meta-flow start/resume` is not enough by itself to satisfy tool-level explicit delegation authorization. If the controller opens a `delegation_authorization` gate, ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this task and wait for a gate decision before spawning role agents.
+- After `delegation_authorization` is accepted, treat that task-level gate decision as explicit user authorization to spawn the controller-listed required role agents for the rest of the task.
 - Require role-owned artifact provenance: JSON artifacts must include `producer.agent_name=<role>` and `producer.execution_mode=spawned_agent`; Markdown artifacts must start with `producer_agent: <role>` and `execution_mode: spawned_agent` frontmatter.
 - Do not directly edit `state.phase`.
 - Write required artifacts to the by-node paths returned by the controller, validate them, then call `meta-flow advance`.
@@ -138,41 +139,42 @@ Stop conditions:
    ```
 
 2. Follow the controller `next_action`.
-3. Spawn `questioner`; only the spawned agent may produce `questioning-report.json` and `goal-contract.json`.
-4. If the spawned `questioner` finds any meaningful user-answerable uncertainty that could change scope, acceptance criteria, risk, UI/UX, dependencies, or implementation direction, it must put that uncertainty in `clarifying_questions`; the main agent then opens a `clarifying_questions` gate and asks the user before continuing. Do this even if the question is not strictly blocking.
-5. Only skip the clarification gate when the spawned `questioner` produced `clarifying_questions=[]`, `can_continue_without_user_answer=true`, and `assumptions_if_user_does_not_answer` covers any remaining low-impact gaps.
-6. Use the spawned `questioner` outputs `questioning-report.json` and `goal-contract.json`; do not generate them in the main agent.
-7. Validate it:
+3. If the controller opens a `delegation_authorization` gate, ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this task; do not spawn `questioner` until the gate is accepted.
+4. Spawn `questioner`; only the spawned agent may produce `questioning-report.json` and `goal-contract.json`.
+5. If the spawned `questioner` finds any meaningful user-answerable uncertainty that could change scope, acceptance criteria, risk, UI/UX, dependencies, or implementation direction, it must put that uncertainty in `clarifying_questions`; the main agent then opens a `clarifying_questions` gate and asks the user before continuing. Do this even if the question is not strictly blocking.
+6. Only skip the clarification gate when the spawned `questioner` produced `clarifying_questions=[]`, `can_continue_without_user_answer=true`, and `assumptions_if_user_does_not_answer` covers any remaining low-impact gaps.
+7. Use the spawned `questioner` outputs `questioning-report.json` and `goal-contract.json`; do not generate them in the main agent.
+8. Validate it:
 
    ```bash
    meta-flow validate goal-contract <path-from-controller> || python3 .meta-flow/scripts/validate_goal_contract.py <path-from-controller>
    ```
 
-8. Advance only through the controller:
+9. Advance only through the controller:
 
    ```bash
    meta-flow advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted."
    ```
 
-9. Enter the proposal drafting node before writing `proposal.md`:
+10. Enter the proposal drafting node before writing `proposal.md`:
 
    ```bash
    meta-flow advance <task-id> --event proposal_started --reason "Proposal research started." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event proposal_started --reason "Proposal research started."
    ```
 
-10. Spawn `researcher_proposer` to create `proposal.md`.
-11. Spawn `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer` as four separate agents; run them in parallel when the environment supports it. The main agent must not write reviewer reports.
-12. Run the mechanical aggregator:
+11. Spawn `researcher_proposer` to create `proposal.md`.
+12. Spawn `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer` as four separate agents; run them in parallel when the environment supports it. The main agent must not write reviewer reports.
+13. Run the mechanical aggregator:
 
    ```bash
    meta-flow aggregate-reviews --reviews-dir <task-dir>/reviews --output <path-from-controller> || python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <path-from-controller>
    ```
 
-13. Spawn `adjudicator`; the main agent must not write `adjudication-report.json`.
-14. Validate `adjudication-report.json`.
-15. Route through controller events such as `adjudication_accept`, `adjudication_revise`, or `adjudication_ask_user`.
-16. If the decision is `accept`, spawn `proposal_summarizer`.
-17. Show `proposal-summary.md` to the user, open a `proposal_confirmation` gate, and only after an `accept` gate decision call `proposal_accepted`.
+14. Spawn `adjudicator`; the main agent must not write `adjudication-report.json`.
+15. Validate `adjudication-report.json`.
+16. Route through controller events such as `adjudication_accept`, `adjudication_revise`, or `adjudication_ask_user`.
+17. If the decision is `accept`, spawn `proposal_summarizer`.
+18. Show `proposal-summary.md` to the user, open a `proposal_confirmation` gate, and only after an `accept` gate decision call `proposal_accepted`.
 
 ## Execution Phase Procedure
 

@@ -49,6 +49,9 @@ export async function validateInstalledSkill(targets) {
   if (!skill.includes("spawn_agent_required") || !skill.includes("The main agent must not write reviewer reports")) {
     errors.push("discoverable SKILL.md does not enforce spawned role agents");
   }
+  if (!skill.includes("delegation_authorization") || !skill.includes("explicitly authorize sub-agents/delegation/parallel agent work")) {
+    errors.push("discoverable SKILL.md does not require task-level delegation authorization");
+  }
   if (!skill.includes("producer.execution_mode=spawned_agent")) {
     errors.push("discoverable SKILL.md does not require role artifact producer metadata");
   }

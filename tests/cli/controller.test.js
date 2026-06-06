@@ -40,18 +40,30 @@ test("controller starts active task and emits resume payloads", async () => {
   const payload = JSON.parse(status.stdout);
   assert.equal(payload.task_id, "T-observe");
   assert.equal(payload.phase, "QUESTIONING");
-  assert.equal(payload.next_action.role, "questioner");
-  assert.equal(payload.next_action.execution_mode, "spawn_agent_required");
-  assert.deepEqual(payload.next_action.required_agents, ["questioner"]);
+  assert.equal(payload.delegation_authorization.status, "pending");
+  assert.equal(payload.open_gate.type, "delegation_authorization");
+  assert.equal(payload.next_action.role, "user");
+  assert.equal(payload.next_action.execution_mode, "user_gate");
+  assert.deepEqual(payload.next_action.required_agents, []);
   assert.equal(payload.next_action.main_agent_may_execute, false);
 
   const codex = runController(root, ["resume", "--format", "codex"]);
   assert.equal(codex.status, 0, codex.stderr);
   assert.match(codex.stdout, /META-FLOW RESUME PACK/);
-  assert.match(codex.stdout, /Role execution mode: spawn_agent_required/);
-  assert.match(codex.stdout, /Required spawned agent\(s\): questioner/);
-  assert.match(codex.stdout, /do not perform this role locally/);
+  assert.match(codex.stdout, /Delegation authorization: pending/);
+  assert.match(codex.stdout, /Open gate: .*delegation_authorization/);
+  assert.match(codex.stdout, /explicitly authorize sub-agents\/delegation\/parallel agent work/);
   assert.match(codex.stdout, /Tell the user the current user-facing stage/);
+
+  const gate = payload.open_gate;
+  const decide = runController(root, ["gate", "decide", "--gate", gate.gate_id, "--decision", "accept", "--comment", "Allow role agents.", "--format", "json"]);
+  assert.equal(decide.status, 0, decide.stderr);
+  const authorized = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(authorized.delegation_authorization.status, "approved");
+  assert.equal(authorized.open_gate, null);
+  assert.equal(authorized.next_action.role, "questioner");
+  assert.equal(authorized.next_action.execution_mode, "spawn_agent_required");
+  assert.deepEqual(authorized.next_action.required_agents, ["questioner"]);
 });
 
 test("controller distinguishes abandon from deactivate", async () => {
@@ -112,9 +124,43 @@ test("controller distinguishes abandon from deactivate", async () => {
   assert.equal(deactivatedIndex.phase, "QUESTIONING");
 });
 
+test("controller blocks task when delegation authorization is rejected", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-delegation-reject-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Reject role agents", "--task-id", "T-no-delegation"]).status, 0);
+
+  const status = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(status.open_gate.type, "delegation_authorization");
+  const reject = runController(root, [
+    "gate",
+    "decide",
+    "--gate",
+    status.open_gate.gate_id,
+    "--decision",
+    "reject",
+    "--comment",
+    "No subagents.",
+    "--format",
+    "json"
+  ]);
+  assert.equal(reject.status, 0, reject.stderr);
+
+  const blocked = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.phase, "BLOCKED");
+  assert.equal(blocked.delegation_authorization.status, "denied");
+  assert.equal(blocked.next_action.execution_mode, "controller_or_none");
+  const state = await readJson(path.join(root, "tasks", "T-no-delegation", "state.json"));
+  assert.equal(state.delegation_authorization.decision, "reject");
+  assert.equal(state.history[state.history.length - 1].to_phase, "BLOCKED");
+});
+
 test("controller advances only through allowed transitions with required artifacts", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-advance-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Improve auth", "--task-id", "T-auth"]).status, 0);
+  const unauthorized = runController(root, ["advance", "--event", "goal_contract_drafted"]);
+  assert.notEqual(unauthorized.status, 0);
+  assert.match(`${unauthorized.stdout}\n${unauthorized.stderr}`, /delegation is required first/);
+  authorizeDelegation(root);
 
   const invalid = runController(root, ["advance", "--event", "reviews_aggregated"]);
   assert.notEqual(invalid.status, 0);
@@ -155,6 +201,7 @@ test("controller advances only through allowed transitions with required artifac
 test("controller requires a clarification gate when questioning report still has questions", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-questioning-gate-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Clarify realtime CLI", "--task-id", "T-clarify"]).status, 0);
+  authorizeDelegation(root);
   const taskDir = path.join(root, "tasks", "T-clarify");
 
   await writeQuestioningReport(taskDir, {
@@ -236,6 +283,7 @@ test("controller validates and migrates legacy tasks without artifact index", as
   assert.equal(legacyPayload.legacy_without_index, true);
   assert.equal(legacyPayload.warnings.length, 1);
 
+  authorizeDelegation(root);
   const legacyGateOpen = runController(root, ["gate", "open", "--type", "clarifying_questions", "--prompt", "Need one answer?", "--format", "json"]);
   assert.equal(legacyGateOpen.status, 0, legacyGateOpen.stderr);
   const legacyGate = JSON.parse(legacyGateOpen.stdout);
@@ -283,6 +331,7 @@ test("controller rejects corrupted artifact manifests", async () => {
 test("controller requires adjudication report for adjudicator ask-user route", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-adjudication-ask-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Ask user from adjudication", "--task-id", "T-adjudication-ask"]).status, 0);
+  authorizeDelegation(root);
   const taskDir = path.join(root, "tasks", "T-adjudication-ask");
 
   await writeQuestioningReport(taskDir);
@@ -343,6 +392,7 @@ test("controller requires adjudication report for adjudicator ask-user route", a
 test("controller records human gates without advancing phase", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-gate-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Plan release", "--task-id", "T-release"]).status, 0);
+  authorizeDelegation(root);
 
   const open = runController(root, ["gate", "open", "--type", "proposal_confirmation", "--prompt", "Accept proposal?", "--format", "json"]);
   assert.equal(open.status, 0, open.stderr);
@@ -378,6 +428,7 @@ test("controller records human gates without advancing phase", async () => {
 test("controller requires decided confirmation gates before user acceptance events", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-confirmation-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Confirm proposal", "--task-id", "T-confirm"]).status, 0);
+  authorizeDelegation(root);
   const taskDir = path.join(root, "tasks", "T-confirm");
 
   await writeQuestioningReport(taskDir);
@@ -416,6 +467,7 @@ test("controller requires decided confirmation gates before user acceptance even
 test("controller maintains artifact layout for main execution nodes", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-artifacts-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Run full artifact layout", "--task-id", "T-artifacts"]).status, 0);
+  authorizeDelegation(root);
   const taskDir = path.join(root, "tasks", "T-artifacts");
 
   await writeQuestioningReport(taskDir);
@@ -484,6 +536,7 @@ test("controller maintains artifact layout for main execution nodes", async () =
 test("controller keeps repeated loop artifacts distinct and records repair node artifacts", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-loop-artifacts-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Repair loop artifacts", "--task-id", "T-loop"]).status, 0);
+  authorizeDelegation(root);
   const taskDir = path.join(root, "tasks", "T-loop");
 
   await writeQuestioningReport(taskDir);
@@ -565,6 +618,30 @@ function runController(root, args) {
       PYTHONDONTWRITEBYTECODE: "1"
     }
   });
+}
+
+function authorizeDelegation(root, comment = "Allow role agents.") {
+  const status = runController(root, ["status", "--format", "json"]);
+  assert.equal(status.status, 0, status.stderr);
+  const payload = JSON.parse(status.stdout);
+  if (payload.delegation_authorization?.status === "approved") {
+    return payload;
+  }
+  assert.equal(payload.open_gate?.type, "delegation_authorization");
+  const decide = runController(root, [
+    "gate",
+    "decide",
+    "--gate",
+    payload.open_gate.gate_id,
+    "--decision",
+    "accept",
+    "--comment",
+    comment,
+    "--format",
+    "json"
+  ]);
+  assert.equal(decide.status, 0, decide.stderr);
+  return JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
 }
 
 async function writeArtifact(taskDir, name, content) {

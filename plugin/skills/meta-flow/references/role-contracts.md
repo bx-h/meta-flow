@@ -6,6 +6,8 @@ Each role has a narrow contract. Do not merge roles even when a task looks small
 
 The main agent is only the workflow orchestrator. Every role below must be run as a spawned custom agent/subagent with the matching role name. The main agent may run controller, validator, and aggregation scripts, but it must not locally emulate a role or write role-owned artifacts.
 
+Tool-level delegation authorization must come from the user, not only from Skill or AGENTS text. If the controller opens a `delegation_authorization` gate, ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this task. After the gate is accepted, the task state records that authorization and the controller may require spawned role agents without asking again.
+
 If the spawn/subagent tool is unavailable, rejected by tool policy, or otherwise impossible, stop and report the blocker to the user. Do not continue by doing the role locally.
 
 Role-owned JSON artifacts must include `producer.agent_name=<role>` and `producer.execution_mode=spawned_agent`. Role-owned Markdown artifacts must start with frontmatter containing `producer_agent: <role>` and `execution_mode: spawned_agent`.

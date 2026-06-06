@@ -91,6 +91,8 @@ flowchart LR
 
 `final_summarizer` writes `final-report.md` with completed work, gaps, evidence, risks, and acceptance result.
 
+Before any role is spawned, the controller requires a one-time `delegation_authorization` user gate. This records explicit task-level permission for sub-agents/delegation/parallel agent work, satisfying tool surfaces that require user authorization before spawning. Rejecting the gate blocks the workflow.
+
 ## Concrete Task Grain
 
 Executor and verifier are concrete-task roles, not milestone roles. This is the main reliability boundary.

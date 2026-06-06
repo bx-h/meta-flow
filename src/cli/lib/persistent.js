@@ -18,6 +18,7 @@ ${command}
 
 Use the returned META-FLOW RESUME PACK as the workflow source of truth before acting.
 Tell the user the current user-facing stage, then perform only the bounded next action.
+If the resume pack shows an open \`delegation_authorization\` gate, ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this task before spawning role agents.
 When the resume pack says \`spawn_agent_required\`, spawn the listed custom agent(s). The main agent must not locally emulate meta-flow roles or write their role-owned artifacts.
 If spawning required agents is unavailable or rejected, stop and tell the user instead of continuing locally.
 Do not start a new meta-flow task, skip phases, or edit ~/.meta-flow/tasks/*/state.json directly.
@@ -96,6 +97,9 @@ export async function inspectPersistentBlock(targets) {
   }
   if (!block.includes("spawn_agent_required")) {
     errors.push("persistent block does not enforce spawned role agents");
+  }
+  if (!block.includes("delegation_authorization")) {
+    errors.push("persistent block does not handle task-level delegation authorization");
   }
   return { target: filePath, exists: true, enabled: true, valid: errors.length === 0, errors };
 }
