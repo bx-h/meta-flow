@@ -286,18 +286,18 @@ User confirmation overload: proposal summary dumps every detail. Summarize what 
 Create a task:
 
 ```bash
-python3 .meta-flow/scripts/new_task.py "<raw request>"
+meta-flow start "<raw request>"
 ```
 
 Validate artifacts:
 
 ```bash
-python3 .meta-flow/scripts/validate_goal_contract.py <task-dir>/goal-contract.json
-python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <task-dir>/review-aggregate.json
-python3 .meta-flow/scripts/validate_adjudication.py <task-dir>/adjudication-report.json
-python3 .meta-flow/scripts/validate_milestone_plan.py <task-dir>/milestone-plan.json
-python3 .meta-flow/scripts/validate_task_list.py <task-dir>/task-list.json
-python3 .meta-flow/scripts/validate_task_verification.py <task-dir>/task-verification-report.json
-python3 .meta-flow/scripts/controller.py artifacts validate <task-id>
-python3 .meta-flow/scripts/status.py <task-dir>
+meta-flow validate goal-contract <task-dir>/artifacts/by-node/03-GOAL_CONTRACT_DRAFTED/done/goal-contract.json
+meta-flow aggregate-reviews --reviews-dir <task-dir>/reviews --output <task-dir>/review-aggregate.json
+meta-flow validate adjudication <task-dir>/artifacts/by-node/06-ADJUDICATION/done/adjudication-report.json
+meta-flow validate milestone-plan <task-dir>/artifacts/by-node/10-PLANNING/done/milestone-plan.json
+meta-flow validate task-list <task-dir>/artifacts/by-node/12-TASK_DECOMPOSITION/done/task-list.json
+meta-flow validate task-verification <task-dir>/artifacts/by-node/14-TASK_VERIFICATION/done/task-verification-report.json
+meta-flow artifacts validate <task-id>
+meta-flow status <task-id>
 ```

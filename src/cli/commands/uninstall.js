@@ -15,7 +15,7 @@ Options:
   --target <path>   Target repo path for repo scope. Defaults to cwd.
   --dry-run         Print planned removals without deleting files.
   --yes             Confirm removal.
-  --keep-tasks      Keep .meta-flow/tasks. This is the default.
+  --keep-tasks      Keep task data. Runtime tasks default to ~/.meta-flow/tasks.
   --verbose         Print detailed actions.`;
 }
 

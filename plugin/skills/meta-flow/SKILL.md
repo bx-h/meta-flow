@@ -16,23 +16,33 @@ Meta-flow is a long-running workflow. Do not rely on chat memory to know where t
 Before acting on an existing meta-flow task, run:
 
 ```bash
-python3 .meta-flow/scripts/controller.py resume --format codex
+meta-flow resume --format codex || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow resume --format codex
 ```
 
 If no active task exists and the user is starting a new meta-flow task, run:
 
 ```bash
-python3 .meta-flow/scripts/controller.py start "<raw request>" --format codex
+meta-flow start "<raw request>" --format codex || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow start "<raw request>" --format codex
 ```
 
-When user scope is installed, the materialized Skill may point these commands at `~/.meta-flow/scripts/`. Task state should still be interpreted as workspace state unless the user explicitly chooses another root.
+`metaflow` is an equivalent bin alias. Runtime task state defaults to `~/.meta-flow`; use `--root <path>` only for explicit migration, testing, or user-requested alternate roots. If the npm CLI is not installed globally, use local Python fallbacks; installed Skills materialize `.meta-flow/scripts/` to the managed support directory.
+
+Fallback command forms:
+
+- Controller commands: `python3 .meta-flow/scripts/controller.py --root ~/.meta-flow <command> ...`
+- `validate goal-contract`: `python3 .meta-flow/scripts/validate_goal_contract.py <path>`
+- `validate adjudication`: `python3 .meta-flow/scripts/validate_adjudication.py <path>`
+- `validate milestone-plan`: `python3 .meta-flow/scripts/validate_milestone_plan.py <path>`
+- `validate task-list`: `python3 .meta-flow/scripts/validate_task_list.py <path>`
+- `validate task-verification`: `python3 .meta-flow/scripts/validate_task_verification.py <path>`
+- `aggregate-reviews`: `python3 .meta-flow/scripts/aggregate_reviews.py ...`
 
 The controller output must drive the next response:
 
 - Tell the user the current user-facing stage.
 - Do only the next bounded action.
 - Do not directly edit `state.phase`.
-- After producing the required artifact, validate it and call `controller.py advance`.
+- Write required artifacts to the by-node paths returned by the controller, validate them, then call `meta-flow advance`.
 - If a gate is open, ask for the user's decision and do not continue until the gate is decided.
 - If the controller rejects a transition, explain the blocker instead of skipping phases.
 
@@ -110,7 +120,7 @@ Stop conditions:
 1. Create a task directory:
 
    ```bash
-   python3 .meta-flow/scripts/controller.py start "<raw request>" --format codex
+   meta-flow start "<raw request>" --format codex || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow start "<raw request>" --format codex
    ```
 
 2. Follow the controller `next_action`.
@@ -120,19 +130,19 @@ Stop conditions:
 6. Validate it:
 
    ```bash
-   python3 .meta-flow/scripts/validate_goal_contract.py <task-dir>/goal-contract.json
+   meta-flow validate goal-contract <path-from-controller> || python3 .meta-flow/scripts/validate_goal_contract.py <path-from-controller>
    ```
 
 7. Advance only through the controller:
 
    ```bash
-   python3 .meta-flow/scripts/controller.py advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted."
+   meta-flow advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted."
    ```
 
 8. Enter the proposal drafting node before writing `proposal.md`:
 
    ```bash
-   python3 .meta-flow/scripts/controller.py advance <task-id> --event proposal_started --reason "Proposal research started."
+   meta-flow advance <task-id> --event proposal_started --reason "Proposal research started." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event proposal_started --reason "Proposal research started."
    ```
 
 9. Invoke `researcher_proposer` to create `proposal.md`.
@@ -140,7 +150,7 @@ Stop conditions:
 11. Run the mechanical aggregator:
 
    ```bash
-   python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <task-dir>/review-aggregate.json
+   meta-flow aggregate-reviews --reviews-dir <task-dir>/reviews --output <path-from-controller> || python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <path-from-controller>
    ```
 
 12. Invoke `adjudicator`.
@@ -194,10 +204,10 @@ Stop conditions:
 
 ## Required Artifacts
 
-Task directories should use the templates in `.meta-flow/templates/` and keep state in `state.json`. The runtime also keeps `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, per-task `events.ndjson`, `artifact-index.json`, canonical artifacts under `artifacts/<name>`, human-readable node views under `artifacts/by-node/<order>-<phase>/<status>/`, and optional `gates/*.json`. When a node/status emits the same artifact more than once, the first artifact keeps the direct by-node filename and later attempts are stored in numbered subdirectories under that node/status. Scripts in `.meta-flow/scripts/` provide initialization, validation, aggregation, controller-based routing, artifact layout validation, and status reporting.
+Task runtime state defaults to `~/.meta-flow/active-task.json`, `~/.meta-flow/task-index.json`, and `~/.meta-flow/tasks/<task-id>/`. Per-task state keeps `state.json`, `events.ndjson`, `artifact-index.json`, business artifacts under `artifacts/by-node/<order>-<phase>/<status>/`, and optional `gates/*.json`. The by-node path is both the human-readable location and the machine contract path. When a node/status emits the same artifact more than once, the first artifact keeps the direct by-node filename and later attempts are stored in numbered subdirectories under that node/status.
 
 After a phase advance, run artifact validation when the change is non-trivial:
 
 ```bash
-python3 .meta-flow/scripts/controller.py artifacts validate <task-id>
+meta-flow artifacts validate <task-id> || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow artifacts validate <task-id>
 ```

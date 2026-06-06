@@ -113,7 +113,7 @@ Uninstall removes:
 - agent TOML files with the meta-flow marker
 - the meta-flow managed block in `AGENTS.md`, if present
 
-It does not delete `.meta-flow/tasks` by default.
+It does not delete task data by default. Runtime task data defaults to `~/.meta-flow/tasks`.
 
 ## Common Issues
 

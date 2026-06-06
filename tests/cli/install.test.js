@@ -23,6 +23,13 @@ test("repo install creates plugin, marketplace, agents, and config", async () =>
 
   const marketplace = JSON.parse(await fs.readFile(path.join(target, ".agents", "plugins", "marketplace.json"), "utf8"));
   assert.equal(marketplace.plugins.filter((plugin) => plugin.name === "meta-flow").length, 1);
+
+  const installedSkill = await fs.readFile(path.join(target, ".agents", "skills", "meta-flow", "SKILL.md"), "utf8");
+  assert.match(installedSkill, /meta-flow resume --format codex/);
+  assert.match(installedSkill, /controller\.py --root ~\/\.meta-flow resume --format codex/);
+  assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "controller.py"))));
+  assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "validate_goal_contract.py"))));
+  assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "aggregate_reviews.py"))));
 });
 
 test("repo install with persistent adds an idempotent AGENTS managed block", async () => {
@@ -37,7 +44,8 @@ test("repo install with persistent adds an idempotent AGENTS managed block", asy
   assert.match(agents, /Keep this line\./);
   assert.equal(agents.match(/meta-flow:persistent:start/g).length, 1);
   assert.equal(agents.match(/meta-flow:persistent:end/g).length, 1);
-  assert.match(agents, /python3 \.meta-flow\/scripts\/controller\.py resume --format codex/);
+  assert.match(agents, /meta-flow resume --format codex/);
+  assert.match(agents, /python3 \.meta-flow\/scripts\/controller\.py --root .*\.meta-flow resume --format codex/);
   assert.match(agents, /META-FLOW RESUME PACK/);
 });
 
@@ -75,4 +83,8 @@ async function exists(filePath) {
   } catch {
     return false;
   }
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -2,6 +2,8 @@
 
 # Meta-Flow Usage And Acceptance Draft
 
+> 注：`0.1.5` 后 runtime task state 默认位于 `~/.meta-flow`，CLI 入口优先使用 `meta-flow ...` / `metaflow ...`。本文中早期 workspace-local 表述只作为历史验收背景保留；新增或当前验收以 home runtime 和 by-node artifact contract 为准。
+
 ## 1. 目的
 
 这份文档把用户可能的真实用法写成后续重构的验收案例。
@@ -17,7 +19,7 @@
 1. 不依赖聊天历史记忆来维持 workflow。
 2. 不依赖 `$meta-flow` 在每一轮都被用户重复提到。
 3. 不默认污染普通任务。
-4. 长程任务必须有 workspace 级 active task 指针。
+4. 长程任务必须有 runtime 级 active task 指针，默认位于 `~/.meta-flow/active-task.json`。
 5. 每个 workflow 阶段必须能从 artifact 恢复。
 6. 人工确认点必须是 gate artifact，而不是聊天里的临时状态。
 7. role 执行可以由主 agent 串行完成；subagent 只能作为用户明确授权后的加速路径。
@@ -51,11 +53,11 @@ $meta-flow stop
 ### CLI / runtime 入口
 
 ```bash
-python3 .meta-flow/scripts/controller.py start "<raw request>"
-python3 .meta-flow/scripts/controller.py resume
-python3 .meta-flow/scripts/controller.py status --json
-python3 .meta-flow/scripts/controller.py gate decide --gate <id> --decision accept
-python3 .meta-flow/scripts/controller.py resume --format codex
+meta-flow start "<raw request>"
+meta-flow resume
+meta-flow status --format json
+meta-flow gate decide --gate <id> --decision accept
+meta-flow resume --format codex
 ```
 
 ### Persistent mode
@@ -76,12 +78,12 @@ Persistent mode 只应写入 repo 级 managed block，例如 `AGENTS.md`，并�
 
 验收时不能只看回复文本。必须同时检查：
 
-- `.meta-flow/active-task.json`
-- `.meta-flow/task-index.json`
-- `.meta-flow/tasks/<task-id>/state.json`
-- `.meta-flow/tasks/<task-id>/events.ndjson`
-- `.meta-flow/tasks/<task-id>/gates/*.json`
-- `.meta-flow/tasks/<task-id>/artifacts/*`
+- `~/.meta-flow/active-task.json`
+- `~/.meta-flow/task-index.json`
+- `~/.meta-flow/tasks/<task-id>/state.json`
+- `~/.meta-flow/tasks/<task-id>/events.ndjson`
+- `~/.meta-flow/tasks/<task-id>/gates/*.json`
+- `~/.meta-flow/tasks/<task-id>/artifacts/by-node/*`
 - doctor/status 输出
 
 ## 5. AI 主导流程说明
@@ -90,7 +92,7 @@ Persistent mode 只应写入 repo 级 managed block，例如 `AGENTS.md`，并�
 
 前置：
 
-`.meta-flow/active-task.json` 存在，当前 phase 是任意非 DONE 节点。
+`~/.meta-flow/active-task.json` 存在，当前 phase 是任意非 DONE 节点。
 
 用户行为：
 
@@ -123,8 +125,8 @@ $meta-flow resume
 用户行为：
 
 ```bash
-python3 .meta-flow/scripts/controller.py resume --format json
-python3 .meta-flow/scripts/controller.py resume --format codex
+meta-flow resume --format json
+meta-flow resume --format codex
 ```
 
 预期：
@@ -201,7 +203,7 @@ AI 尝试直接把 `state.phase` 改成 `PROPOSAL_REVIEW`。
 用户行为：
 
 ```bash
-python3 .meta-flow/scripts/controller.py advance --event proposal_created
+meta-flow advance --event proposal_created
 ```
 
 当前 phase 为 `QUESTIONING`。
@@ -357,8 +359,8 @@ $meta-flow start: 帮我系统性改造错误处理
 
 - repo 下出现 `.agents/skills/meta-flow`、`.meta-flow/scripts`、`.meta-flow/templates`、`.codex/agents`。
 - `$meta-flow` 可被发现。
-- 新任务写到当前 repo 的 `.meta-flow/tasks`。
-- 不写入用户其他 repo。
+- 新任务默认写到 `~/.meta-flow/tasks`，而不是依赖当前 repo 的 cwd。
+- repo 下只写安装支持文件，不把业务产物散落到用户正在工作的仓库。
 
 ### A2. User scope 安装后跨 repo 使用
 
@@ -377,8 +379,8 @@ $meta-flow start: 帮我规划一个迁移任务
 预期：
 
 - Skill 和 support script 来自 user scope。
-- task state 默认写到当前 workspace 的 `.meta-flow/tasks`，而不是全部写到 `~/.meta-flow/tasks`。
-- status/resume 能从当前 workspace 找到 active task。
+- task state 默认写到 `~/.meta-flow/tasks`。
+- status/resume 能从 home runtime 找到 active task；只有显式 `--root` / `META_FLOW_ROOT` 才使用隔离 runtime。
 
 ### A3. npx 安装后没有全局 CLI
 
@@ -414,7 +416,7 @@ $meta-workflow start: ...
 
 前置：
 
-- 源码是 `0.1.4`。
+- 源码是 `0.1.5`。
 - 已安装 plugin 或 marketplace 是 `0.1.1`。
 
 用户行为：
@@ -440,7 +442,7 @@ meta-flow uninstall --scope repo --yes
 预期：
 
 - 删除 managed plugin、Skill、agents、marketplace entry。
-- 默认保留 `.meta-flow/tasks`。
+- 默认保留 `~/.meta-flow/tasks`。
 - 如果 persistent AGENTS block 是 installer 创建的，应移除 managed block。
 - 不删除用户手写的 AGENTS 内容。
 
@@ -491,7 +493,7 @@ $meta-flow resume
 
 预期：
 
-- controller 读取 `.meta-flow/active-task.json`。
+- controller 读取 `~/.meta-flow/active-task.json`。
 - 输出当前 phase、blocked/gate 状态和下一步 action。
 - 不新建任务。
 - 不重新询问已经完成的步骤。
@@ -504,7 +506,7 @@ $meta-flow resume
 meta-flow install --scope repo --persistent
 ```
 
-并且 `.meta-flow/active-task.json` 存在。
+并且 `~/.meta-flow/active-task.json` 存在。
 
 用户行为：
 
@@ -524,7 +526,7 @@ meta-flow install --scope repo --persistent
 
 前置：
 
-repo root 有 `.meta-flow/active-task.json`。
+`~/.meta-flow/active-task.json` 存在。
 
 用户行为：
 
@@ -536,7 +538,7 @@ repo root 有 `.meta-flow/active-task.json`。
 
 预期：
 
-- runtime 能定位 repo root 或 workspace root。
+- runtime 使用 home runtime root，除非用户显式传入 `--root` 或 `META_FLOW_ROOT`。
 - 读取同一个 active task。
 - 不在子目录创建新的 `.meta-flow`。
 
@@ -1254,9 +1256,9 @@ npm test
 npm run verify
 node bin/meta-flow.js install --scope repo --target <tmp> --yes
 node bin/meta-flow.js doctor --scope repo --target <tmp>
-python3 <tmp>/.meta-flow/scripts/controller.py start "sample request"
-python3 <tmp>/.meta-flow/scripts/controller.py resume
-python3 <tmp>/.meta-flow/scripts/controller.py status --json
+HOME=<tmp-home> node bin/meta-flow.js start "sample request"
+HOME=<tmp-home> node bin/meta-flow.js resume
+HOME=<tmp-home> node bin/meta-flow.js status --format json
 ```
 
 还需要手工模拟：

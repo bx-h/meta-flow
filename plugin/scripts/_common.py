@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
+
 
 VALID_PHASES = {
     "INTAKE",

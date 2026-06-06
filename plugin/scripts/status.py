@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 from controller import ROOT, render_payload, resolve_task_dir, status_payload
 

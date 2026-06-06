@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 from _common import fail, load_json, ok, require_dict, require_list, require_non_empty_string, warn
 

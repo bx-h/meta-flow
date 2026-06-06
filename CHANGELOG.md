@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5
+
+- Default runtime task state to `~/.meta-flow` so task products do not depend on the current repository directory.
+- Add `meta-flow` / `metaflow` runtime commands for start, resume, status, advance, gates, artifact validation, artifact validators, and reviewer aggregation.
+- Make by-node artifact paths the machine contract for new tasks, removing duplicate canonical business artifacts while preserving legacy lookup support.
+- Disable Python bytecode generation for helper scripts and CLI Python invocations.
+
 ## 0.1.4
 
 - Add artifact manifest tracking with stable canonical paths and readable by-node views.

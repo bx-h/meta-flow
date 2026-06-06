@@ -2,6 +2,8 @@
 
 # Meta-Flow Redesign Draft
 
+> 注：这是早期重构设计草稿。`0.1.5` 后当前实现优先使用 `meta-flow ...` / `metaflow ...` CLI，runtime task state 默认位于 `~/.meta-flow`，by-node artifact path 同时作为人类视图和机器契约。
+
 ## 1. 背景和目标
 
 用户观察到：开始工作时指定 `$meta-workflow` 或类似入口后，一轮会话之后系统像是忘记了 meta-flow，没有继续按长程 workflow 执行，也没有启动预期的 subagent。
@@ -35,7 +37,7 @@ legacy 背景文件一开始误放在安装副本中，现已迁到源码仓库�
 
 本机 user-scope 安装还有版本不一致问题：
 
-- 源码为 `0.1.4`。
+- 源码为 `0.1.5`。
 - 已安装 plugin manifest 和 marketplace 仍为 `0.1.1`。
 - 已安装模板存在校验失败。
 
@@ -228,7 +230,7 @@ OpenAI Agents SDK 的定位也类似：它适合应用代码拥有 orchestration
 
 - source package
 - installed runtime assets
-- workspace task state
+- home runtime task state
 - optional persistent instruction
 
 新增或调整：
@@ -248,16 +250,16 @@ OpenAI Agents SDK 的定位也类似：它适合应用代码拥有 orchestration
 核心命令：
 
 ```bash
-python3 .meta-flow/scripts/controller.py start "<raw request>"
-python3 .meta-flow/scripts/controller.py resume
-python3 .meta-flow/scripts/controller.py status --json
-python3 .meta-flow/scripts/controller.py advance --task <id> --to <phase> --reason <reason>
-python3 .meta-flow/scripts/controller.py gate open --type proposal_confirmation ...
-python3 .meta-flow/scripts/controller.py gate decide --gate <id> --decision accept|reject --comment ...
-python3 .meta-flow/scripts/controller.py deactivate --task <id>
+meta-flow start "<raw request>"
+meta-flow resume
+meta-flow status --format json
+meta-flow advance <task-id> --event <event> --reason <reason>
+meta-flow gate open --type proposal_confirmation ...
+meta-flow gate decide --gate <id> --decision accept|reject --comment ...
+meta-flow deactivate <task-id>
 ```
 
-User-scope Skill 可以调用 `~/.meta-flow/scripts/controller.py`，但 task state 默认写入当前 workspace 的 `.meta-flow/tasks`，并用显式 `--workspace-root` 避免 cwd 混乱。
+如果 npm CLI 不在 PATH，Skill 可以回退到安装器复制的 support script，例如 `python3 .meta-flow/scripts/controller.py --root ~/.meta-flow ...`。task state 默认写入 `~/.meta-flow/tasks`；只有显式 `--root` 或 `META_FLOW_ROOT` 才切换隔离 runtime。
 
 controller 必须同时服务机器和用户，但不能把状态理解负担交给用户。它应该输出两类视图：
 
@@ -317,8 +319,8 @@ Persistent mode 在 repo `AGENTS.md` 加 managed block：
 
 ```md
 <!-- meta-flow:persistent:start -->
-When `.meta-flow/active-task.json` exists and the user has not explicitly opted out,
-run `python3 .meta-flow/scripts/controller.py resume --format codex` before acting.
+When a meta-flow task may be active and the user has not explicitly opted out,
+run `meta-flow resume --format codex || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow resume --format codex` before acting.
 Follow the returned next action and do not start a new meta-flow task unless instructed.
 <!-- meta-flow:persistent:end -->
 ```
@@ -451,9 +453,9 @@ AI 的职责不是决定任意路线，而是：
 npm test
 npm run verify
 node bin/meta-flow.js install --scope repo --target <tmp> --yes
-python3 <tmp>/.meta-flow/scripts/controller.py start "sample request"
-python3 <tmp>/.meta-flow/scripts/controller.py resume
-python3 <tmp>/.meta-flow/scripts/controller.py status --json
+HOME=<tmp-home> node bin/meta-flow.js start "sample request"
+HOME=<tmp-home> node bin/meta-flow.js resume
+HOME=<tmp-home> node bin/meta-flow.js status --format json
 ```
 
 行为验证：

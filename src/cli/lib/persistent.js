@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { backupIfExists, pathExists, removeFileSafe } from "./fs_safe.js";
 
@@ -6,9 +7,10 @@ export const PERSISTENT_START = "<!-- meta-flow:persistent:start -->";
 export const PERSISTENT_END = "<!-- meta-flow:persistent:end -->";
 
 export function buildPersistentBlock(targets) {
-  const command = `python3 ${shellPath(controllerPathForAgents(targets))} resume --format codex`;
+  const fallback = `python3 ${shellPath(controllerPathForAgents(targets))} --root ${shellPath(runtimeRootForAgents())} resume --format codex`;
+  const command = `meta-flow resume --format codex || ${fallback}`;
   return `${PERSISTENT_START}
-When .meta-flow/active-task.json exists in the current workspace and the user has not explicitly opted out of meta-flow, run:
+When a meta-flow task may be active and the user has not explicitly opted out of meta-flow, run:
 
 \`\`\`bash
 ${command}
@@ -16,7 +18,7 @@ ${command}
 
 Use the returned META-FLOW RESUME PACK as the workflow source of truth before acting.
 Tell the user the current user-facing stage, then perform only the bounded next action.
-Do not start a new meta-flow task, skip phases, or edit .meta-flow/tasks/*/state.json directly.
+Do not start a new meta-flow task, skip phases, or edit ~/.meta-flow/tasks/*/state.json directly.
 If the controller reports no active task, is missing, or returns an error, continue normally and mention the blocker only if it affects the user's request.
 ${PERSISTENT_END}
 `;
@@ -84,8 +86,8 @@ export async function inspectPersistentBlock(targets) {
   }
   const block = text.slice(range.start, range.end);
   const errors = [];
-  if (!block.includes("controller.py") || !block.includes("resume --format codex")) {
-    errors.push("persistent block does not call controller.py resume --format codex");
+  if (!block.includes("meta-flow resume --format codex") || !block.includes("resume --format codex")) {
+    errors.push("persistent block does not call meta-flow resume --format codex");
   }
   if (!block.includes("META-FLOW RESUME PACK")) {
     errors.push("persistent block does not instruct Codex to use the resume pack");
@@ -147,6 +149,10 @@ function controllerPathForAgents(targets) {
     return path.join(targets.scriptsTarget, "controller.py");
   }
   return ".meta-flow/scripts/controller.py";
+}
+
+function runtimeRootForAgents() {
+  return path.join(os.homedir(), ".meta-flow");
 }
 
 function shellPath(filePath) {

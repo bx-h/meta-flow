@@ -34,14 +34,14 @@ User scope writes only under `os.homedir()` equivalents:
 - `.codex/agents`
 - `.codex/config.toml`
 
-Delete operations are limited to confirmed meta-flow plugin directories, managed Skill directories, managed support directories, and marked meta-flow agent files. Task data under `.meta-flow/tasks` is kept by default.
+Delete operations are limited to confirmed meta-flow plugin directories, managed Skill directories, managed support directories, and marked meta-flow agent files. Runtime task data under `~/.meta-flow/tasks` is kept by default.
 
 ## Supply Chain Risks
 
 Use version pinning for reproducibility:
 
 ```bash
-npx @bx-h/meta-flow@0.1.4 install --scope repo
+npx @bx-h/meta-flow@0.1.5 install --scope repo
 ```
 
 Run dry-run before installing:

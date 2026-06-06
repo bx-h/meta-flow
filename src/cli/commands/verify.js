@@ -39,6 +39,7 @@ async function checkPackageJson() {
   if (packageJson.version !== META_FLOW_VERSION) errors.push(`unexpected package version: ${packageJson.version}`);
   if (packageJson.scripts?.postinstall) errors.push("postinstall must not exist");
   if (packageJson.bin?.["meta-flow"] !== "bin/meta-flow.js") errors.push("bin meta-flow is invalid");
+  if (packageJson.bin?.metaflow !== "bin/meta-flow.js") errors.push("bin metaflow alias is invalid");
   if (packageJson.type !== "module") errors.push("type must be module");
   return result("package.json", errors);
 }

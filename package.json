@@ -1,10 +1,11 @@
 {
   "name": "@bx-h/meta-flow",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A Codex-native workflow for clarified goals, reviewed proposals, adjudicated plans, task-level execution, verification, and direction-aware iteration.",
   "type": "module",
   "bin": {
-    "meta-flow": "bin/meta-flow.js"
+    "meta-flow": "bin/meta-flow.js",
+    "metaflow": "bin/meta-flow.js"
   },
   "files": [
     "bin/",

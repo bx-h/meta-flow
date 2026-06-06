@@ -32,7 +32,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.4 install --scope repo
+npx @bx-h/meta-flow@0.1.5 install --scope repo
 ```
 
 ## Quick Start
@@ -51,7 +51,7 @@ To continue an existing task, say:
 $meta-flow resume
 ```
 
-If you installed with `--persistent`, Codex will check `.meta-flow/active-task.json` from `AGENTS.md` and ask the controller for the current node before acting. Without `--persistent`, use `$meta-flow resume` when you want to continue.
+If you installed with `--persistent`, Codex will ask the controller for the current node before acting. Without `--persistent`, use `$meta-flow resume` when you want to continue.
 
 You can check installation state with:
 
@@ -59,7 +59,7 @@ You can check installation state with:
 meta-flow doctor --scope repo
 ```
 
-Meta Flow keeps runtime state in `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, and `.meta-flow/tasks/<task-id>/`. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names. Canonical artifacts stay under stable machine-readable names, while `artifact-index.json` and `artifacts/by-node/<order>-<phase>/<status>/` provide a readable node-by-node view with numbered subdirectories for repeated attempts.
+Meta Flow keeps runtime state in `~/.meta-flow/active-task.json`, `~/.meta-flow/task-index.json`, and `~/.meta-flow/tasks/<task-id>/` by default. Override with `META_FLOW_ROOT` or command-scoped `--root <path>` such as `meta-flow status --root <path>` only when you intentionally want an isolated runtime. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names. Business artifacts live under stable by-node machine paths such as `artifacts/by-node/<order>-<phase>/<status>/<artifact>`, and `artifact-index.json` records the contract, hash, event, node, and retry metadata.
 
 ## When To Use It
 
@@ -136,9 +136,6 @@ Repo scope writes under the target repo:
 - `<repo>/.agents/skills/meta-flow`
 - `<repo>/.meta-flow/scripts`
 - `<repo>/.meta-flow/templates`
-- `<repo>/.meta-flow/active-task.json`
-- `<repo>/.meta-flow/task-index.json`
-- `<repo>/.meta-flow/tasks`
 - `<repo>/.agents/plugins/marketplace.json`
 - `<repo>/.codex/agents/*.toml`
 - `<repo>/.codex/config.toml`
@@ -149,14 +146,11 @@ User scope writes under the current user home:
 - `~/.agents/skills/meta-flow`
 - `~/.meta-flow/scripts`
 - `~/.meta-flow/templates`
-- workspace `.meta-flow/active-task.json`
-- workspace `.meta-flow/task-index.json`
-- workspace `.meta-flow/tasks`
 - `~/.agents/plugins/marketplace.json`
 - `~/.codex/agents/*.toml`
 - `~/.codex/config.toml`
 
-Task data under `.meta-flow/tasks` is not removed by uninstall.
+Task runtime data defaults to `~/.meta-flow/active-task.json`, `~/.meta-flow/task-index.json`, and `~/.meta-flow/tasks` regardless of repo or user install scope. It is not removed by uninstall.
 
 ## Uninstall
 
@@ -188,7 +182,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.4
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.5
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.

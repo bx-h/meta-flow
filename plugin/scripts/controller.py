@@ -7,16 +7,20 @@ import json
 import os
 import re
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+sys.dont_write_bytecode = True
+
 from _common import fail, load_json, write_json
 
 
-ROOT = Path(os.environ.get("META_FLOW_ROOT", Path.cwd() / ".meta-flow"))
+ROOT = Path(os.environ.get("META_FLOW_ROOT", Path.home() / ".meta-flow"))
 WORKFLOW_VERSION = "1"
-ARTIFACT_INDEX_LAYOUT = "by-node-v1"
+ARTIFACT_INDEX_LAYOUT = "by-node-v2"
+LEGACY_ARTIFACT_INDEX_LAYOUTS = {"by-node-v1"}
 
 PHASE_SEQUENCE = [
     "INTAKE",
@@ -452,17 +456,32 @@ def write_artifact_index(task_dir: Path, index: dict[str, Any], timestamp: str) 
     write_json(artifact_index_path(task_dir), index)
 
 
+def index_artifact_paths(task_dir: Path, name: str) -> list[Path]:
+    index = load_artifact_index(task_dir)
+    artifacts = index.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return []
+    paths: list[Path] = []
+    for entry in reversed(artifacts):
+        if not isinstance(entry, dict) or entry.get("name") != name:
+            continue
+        for field in ("display_path", "canonical_path"):
+            value = entry.get(field)
+            if isinstance(value, str) and value:
+                paths.append(task_dir / value)
+    return paths
+
+
+def legacy_artifact_candidates(task_dir: Path, name: str) -> list[Path]:
+    if name.startswith("gates/"):
+        return [task_dir / name]
+    return [task_dir / name, artifacts_dir(task_dir) / name]
+
+
 def artifact_candidates(task_dir: Path, name: str) -> list[Path]:
     if name.startswith("gates/"):
         return [task_dir / name]
-    candidates = []
-    if "/" not in name:
-        candidates.append(task_dir / name)
-        candidates.append(artifacts_dir(task_dir) / name)
-    else:
-        candidates.append(task_dir / name)
-        candidates.append(artifacts_dir(task_dir) / name)
-    return candidates
+    return [*index_artifact_paths(task_dir, name), *legacy_artifact_candidates(task_dir, name)]
 
 
 def latest_existing_path(paths: list[Path]) -> Path | None:
@@ -470,12 +489,6 @@ def latest_existing_path(paths: list[Path]) -> Path | None:
     if not existing:
         return None
     return max(existing, key=lambda path: path.stat().st_mtime_ns)
-
-
-def canonical_artifact_path(task_dir: Path, name: str) -> Path:
-    if name.startswith("gates/"):
-        return task_dir / name
-    return artifacts_dir(task_dir) / name
 
 
 def safe_path_segment(value: str) -> str:
@@ -521,14 +534,14 @@ def artifact_occurrence(index: dict[str, Any], phase: str, status: str, name: st
 
 
 def ensure_artifact_layout(task_dir: Path, name: str, phase: str, status: str, occurrence: int, event: str) -> tuple[Path, Path, Path]:
-    source = latest_existing_path(artifact_candidates(task_dir, name))
+    display = display_artifact_path(task_dir, phase, status, name, occurrence, event)
+    source = latest_existing_path([display, *legacy_artifact_candidates(task_dir, name)])
     if not source:
         raise SystemExit(f"Cannot record artifact {name}; file not found.")
-    canonical = canonical_artifact_path(task_dir, name)
-    copy_if_needed(source, canonical)
-    display = display_artifact_path(task_dir, phase, status, name, occurrence, event)
-    copy_if_needed(canonical, display)
-    return source, canonical, display
+    display.parent.mkdir(parents=True, exist_ok=True)
+    if source.resolve() != display.resolve():
+        shutil.move(str(source), str(display))
+    return display, display, display
 
 
 def append_artifact_entry(
@@ -715,8 +728,9 @@ def start_task(root: Path, raw_request: str, task_id: str | None = None) -> Path
     state = initial_state(resolved_task_id, timestamp)
     write_json(task_dir / "state.json", state)
     text = raw_request.rstrip() + "\n"
-    (task_dir / "raw-request.md").write_text(text, encoding="utf-8")
-    (artifacts_dir(task_dir) / "raw-request.md").write_text(text, encoding="utf-8")
+    raw_request_path = display_artifact_path(task_dir, "INTAKE", "done", "raw-request.md", 1, "task_started")
+    raw_request_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_request_path.write_text(text, encoding="utf-8")
     artifact_refs = record_artifacts_for_event(task_dir, "task_started", "INTAKE", "done", timestamp)
     write_event(
         task_dir,
@@ -780,8 +794,13 @@ def artifact_exists(task_dir: Path, name: str) -> bool:
     return latest_existing_path(artifact_candidates(task_dir, name)) is not None
 
 
-def legacy_without_artifact_index(task_dir: Path) -> bool:
-    return not artifact_index_path(task_dir).exists()
+def artifact_exists_for_spec(task_dir: Path, event: str, from_phase: str | None, spec: dict[str, Any]) -> bool:
+    artifact_phase = artifact_phase_for_spec(spec, from_phase)
+    name = spec["name"]
+    index = load_artifact_index(task_dir)
+    occurrence = artifact_occurrence(index, artifact_phase, "done", name)
+    expected_path = display_artifact_path(task_dir, artifact_phase, "done", name, occurrence, event)
+    return latest_existing_path([expected_path, *legacy_artifact_candidates(task_dir, name)]) is not None
 
 
 def task_started_before_artifact_adoption(task_dir: Path) -> bool:
@@ -820,11 +839,22 @@ def ensure_legacy_questioning_report(task_dir: Path, timestamp: str) -> None:
         "can_continue_without_user_answer": True,
         "compatibility_generated_at": timestamp,
     }
-    write_json(task_dir / "questioning-report.json", report)
+    index = load_artifact_index(task_dir)
+    phase = "QUESTIONING"
+    event = "goal_contract_drafted"
+    occurrence = artifact_occurrence(index, phase, "done", "questioning-report.json")
+    target = display_artifact_path(task_dir, phase, "done", "questioning-report.json", occurrence, event)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    write_json(target, report)
 
 
 def missing_required_artifacts(task_dir: Path, event: str, from_phase: str | None) -> list[str]:
-    return [name for name in required_artifact_names_for_event(event, from_phase) if not artifact_exists(task_dir, name)]
+    missing = []
+    for spec in artifact_specs_for_event(event, from_phase):
+        name = spec["name"]
+        if not artifact_exists_for_spec(task_dir, event, from_phase, spec):
+            missing.append(name)
+    return missing
 
 
 def open_gate(task_dir: Path) -> dict[str, Any] | None:
@@ -890,20 +920,18 @@ def collect_blocked_issues(task_dir: Path) -> list[str]:
 
 
 def artifact_refs(task_dir: Path) -> list[str]:
-    refs = []
-    for name in (
-        "raw-request.md",
-        "goal-contract.json",
-        "proposal.md",
-        "review-aggregate.json",
-        "adjudication-report.json",
-        "proposal-summary.md",
-        "milestone-plan.json",
-        "final-report.md",
-    ):
-        if artifact_exists(task_dir, name):
-            refs.append(name)
-    return refs
+    index = load_artifact_index(task_dir)
+    artifacts = index.get("artifacts", [])
+    if isinstance(artifacts, list):
+        refs = [
+            entry.get("display_path")
+            for entry in artifacts
+            if isinstance(entry, dict)
+            and entry.get("artifact_type") == "file"
+            and isinstance(entry.get("display_path"), str)
+        ]
+        return list(dict.fromkeys(refs))
+    return []
 
 
 def artifact_summary(task_dir: Path) -> dict[str, Any]:
@@ -912,7 +940,7 @@ def artifact_summary(task_dir: Path) -> dict[str, Any]:
     latest = artifacts[-5:] if isinstance(artifacts, list) else []
     return {
         "index_path": str(artifact_index_path(task_dir)),
-        "layout": index.get("layout", "by-node-v1"),
+        "layout": index.get("layout", ARTIFACT_INDEX_LAYOUT),
         "count": len(artifacts) if isinstance(artifacts, list) else 0,
         "latest": latest,
     }
@@ -932,6 +960,28 @@ def expected_artifacts_by_event_for_phase(phase: str) -> dict[str, list[str]]:
         names = required_artifact_names_for_event(event, phase)
         if names:
             expected[event] = names
+    return expected
+
+
+def expected_artifact_paths_by_event_for_phase(task_dir: Path, phase: str) -> dict[str, list[dict[str, Any]]]:
+    index = load_artifact_index(task_dir)
+    expected: dict[str, list[dict[str, Any]]] = {}
+    for event in completion_events_for_phase(phase):
+        items = []
+        for spec in artifact_specs_for_event(event, phase):
+            artifact_phase = artifact_phase_for_spec(spec, phase)
+            name = spec["name"]
+            occurrence = artifact_occurrence(index, artifact_phase, "done", name)
+            path = display_artifact_path(task_dir, artifact_phase, "done", name, occurrence, event)
+            items.append({
+                "name": name,
+                "node": artifact_phase,
+                "node_key": node_key(artifact_phase),
+                "status": "done",
+                "path": relative_to_task(task_dir, path),
+            })
+        if items:
+            expected[event] = items
     return expected
 
 
@@ -968,6 +1018,7 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
         "artifact_index": artifact_summary(task_dir),
         "expected_artifacts_for_next_action": expected_artifacts_for_next_action(phase),
         "expected_artifacts_by_event": expected_artifacts_by_event_for_phase(phase),
+        "expected_artifact_paths_by_event": expected_artifact_paths_by_event_for_phase(task_dir, phase),
     }
 
 
@@ -999,6 +1050,8 @@ def print_text(payload: dict[str, Any]) -> None:
     if payload.get("expected_artifacts_by_event"):
         for event, artifacts in payload["expected_artifacts_by_event"].items():
             print(f"expected artifacts for {event}: {', '.join(artifacts)}")
+            for item in payload.get("expected_artifact_paths_by_event", {}).get(event, []):
+                print(f"  - {item['name']}: {item['path']}")
     elif payload["expected_artifacts_for_next_action"]:
         print(f"next expected artifacts: {', '.join(payload['expected_artifacts_for_next_action'])}")
 
@@ -1021,6 +1074,8 @@ def print_codex(payload: dict[str, Any]) -> None:
         print("Expected artifacts by completion event:")
         for event, artifacts in payload["expected_artifacts_by_event"].items():
             print(f"- {event}: {', '.join(artifacts)}")
+            for item in payload.get("expected_artifact_paths_by_event", {}).get(event, []):
+                print(f"  - write {item['name']} to {item['path']}")
     elif payload["expected_artifacts_for_next_action"]:
         print(f"Expected artifacts for next action: {', '.join(payload['expected_artifacts_for_next_action'])}")
     if gate:
@@ -1029,7 +1084,8 @@ def print_codex(payload: dict[str, Any]) -> None:
     print("Instructions for Codex:")
     print("- Tell the user the current user-facing stage before doing work.")
     print("- Do only the next bounded action described above.")
-    print("- Do not directly edit state.phase; call controller.py advance after producing required artifacts.")
+    print("- Write required artifacts to the listed by-node paths, then call meta-flow advance.")
+    print("- Do not directly edit state.phase; call meta-flow advance after producing required artifacts.")
     print("- If a gate is open, ask for the user's decision and do not continue until it is decided.")
     print("- If an artifact is missing or invalid, explain the blocker and do not skip phases.")
     print(f"Allowed user actions: {', '.join(payload['allowed_user_actions'])}")
@@ -1263,7 +1319,7 @@ def expected_display_path_for_entry(task_dir: Path, entry: dict[str, Any]) -> st
 def validate_artifact_index_header(index: dict[str, Any], errors: list[str]) -> list[dict[str, Any]]:
     if index.get("version") != WORKFLOW_VERSION:
         errors.append(f"artifact-index.json version must be {WORKFLOW_VERSION}: {index.get('version')}")
-    if index.get("layout") != ARTIFACT_INDEX_LAYOUT:
+    if index.get("layout") not in {ARTIFACT_INDEX_LAYOUT, *LEGACY_ARTIFACT_INDEX_LAYOUTS}:
         errors.append(f"artifact-index.json layout must be {ARTIFACT_INDEX_LAYOUT}: {index.get('layout')}")
     for field in ("adopted_at", "updated_at"):
         if not isinstance(index.get(field), str) or not index.get(field):
@@ -1356,6 +1412,8 @@ def validate_artifacts(task_dir: Path) -> dict[str, Any]:
         index = {}
         errors.append("artifact-index.json must be an object")
     artifacts = validate_artifact_index_header(index, errors)
+    layout = index.get("layout")
+    by_node_only_layout = layout == ARTIFACT_INDEX_LAYOUT
 
     seen_sequences = set()
     seen_display_paths = set()
@@ -1392,6 +1450,8 @@ def validate_artifacts(task_dir: Path) -> dict[str, Any]:
             errors.append(f"source artifact missing: {entry.get('source_path')}")
         if canonical and not canonical.exists():
             errors.append(f"canonical artifact missing: {entry.get('canonical_path')}")
+        if by_node_only_layout and entry.get("artifact_type") == "file" and entry.get("canonical_path") != entry.get("display_path"):
+            errors.append(f"canonical path must equal display path for by-node machine contract: {entry.get('name')}")
         if display:
             display_key = str(Path(entry.get("display_path", "")))
             if display_key in seen_display_paths:
@@ -1529,7 +1589,7 @@ def render_artifact_validation(result: dict[str, Any], output_format: str) -> No
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the meta-flow controller.")
-    parser.add_argument("--root", type=Path, default=ROOT, help="Meta-flow root directory. Defaults to .meta-flow or META_FLOW_ROOT.")
+    parser.add_argument("--root", type=Path, default=ROOT, help="Meta-flow runtime root. Defaults to META_FLOW_ROOT or ~/.meta-flow.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     start = subparsers.add_parser("start", help="Start a new meta-flow task.")

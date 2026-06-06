@@ -34,19 +34,31 @@ export async function validateInstalledSkill(targets) {
   if (!/^---\n[\s\S]*?name:\s*meta-flow[\s\S]*?---/m.test(skill)) {
     errors.push("discoverable SKILL.md frontmatter invalid");
   }
-  if (!skill.includes(`${supportRootForSkill(targets)}/scripts/controller.py`)) {
-    errors.push("discoverable SKILL.md points at the wrong support script path");
+  if (!skill.includes("meta-flow resume --format codex")) {
+    errors.push("discoverable SKILL.md does not use the meta-flow runtime CLI");
+  }
+  if (!skill.includes("controller.py --root ~/.meta-flow resume --format codex")) {
+    errors.push("discoverable SKILL.md does not include the local controller fallback");
+  }
+  if (!skill.includes("validate_goal_contract.py")) {
+    errors.push("discoverable SKILL.md does not include local validation fallback");
+  }
+  if (!skill.includes("aggregate_reviews.py")) {
+    errors.push("discoverable SKILL.md does not include local review aggregation fallback");
   }
   return { skillPath, errors };
 }
 
 function materializeSkillText(text, targets) {
-  const supportRoot = supportRootForSkill(targets);
+  const supportRoot = shellPath(targets.supportTarget);
   return text
-    .replaceAll("python3 .meta-flow/scripts/", `python3 ${supportRoot}/scripts/`)
+    .replaceAll(".meta-flow/scripts/", `${supportRoot}/scripts/`)
     .replaceAll(".meta-flow/templates/", `${supportRoot}/templates/`);
 }
 
-function supportRootForSkill(targets) {
-  return targets.scope === "user" ? "~/.meta-flow" : ".meta-flow";
+function shellPath(filePath) {
+  if (/^[A-Za-z0-9_./-]+$/.test(filePath)) {
+    return filePath;
+  }
+  return `'${filePath.replaceAll("'", "'\\''")}'`;
 }

@@ -27,10 +27,12 @@ test("controller starts active task and emits resume payloads", async () => {
   assert.match(events, /start_questioning/);
 
   const artifactIndex = JSON.parse(await fs.readFile(path.join(taskDir, "artifact-index.json"), "utf8"));
-  assert.equal(artifactIndex.layout, "by-node-v1");
+  assert.equal(artifactIndex.layout, "by-node-v2");
   assert.equal(artifactIndex.artifacts[0].node_key, "01-INTAKE");
   assert.equal(artifactIndex.artifacts[0].status, "done");
-  assert.equal(await exists(path.join(taskDir, "artifacts", "raw-request.md")), true);
+  assert.equal(artifactIndex.artifacts[0].canonical_path, artifactIndex.artifacts[0].display_path);
+  assert.equal(await exists(path.join(taskDir, "raw-request.md")), false);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "raw-request.md")), false);
   assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "01-INTAKE", "done", "raw-request.md")), true);
 
   const status = runController(root, ["status", "--format", "json"]);
@@ -76,7 +78,7 @@ test("controller advances only through allowed transitions with required artifac
   const artifactIndex = JSON.parse(await fs.readFile(path.join(taskDir, "artifact-index.json"), "utf8"));
   assert.equal(artifactIndex.artifacts.some((entry) => entry.node_key === "02-QUESTIONING" && entry.name === "goal-contract.json"), true);
   assert.equal(artifactIndex.artifacts.some((entry) => entry.node_key === "02-QUESTIONING" && entry.name === "questioning-report.json"), true);
-  assert.equal(await exists(path.join(taskDir, "artifacts", "goal-contract.json")), true);
+  assert.equal(await exists(path.join(taskDir, "artifacts", "goal-contract.json")), false);
   assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "goal-contract.json")), true);
   assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "questioning-report.json")), true);
   const artifactValidation = runController(root, ["artifacts", "validate", "--format", "json"]);
@@ -143,7 +145,7 @@ test("controller validates and migrates legacy tasks without artifact index", as
   const advance = runController(root, ["advance", "--event", "goal_contract_drafted", "--format", "json"]);
   assert.equal(advance.status, 0, advance.stderr);
   assert.equal(JSON.parse(advance.stdout).phase, "GOAL_CONTRACT_DRAFTED");
-  assert.equal(await exists(path.join(taskDir, "questioning-report.json")), true);
+  assert.equal(await exists(path.join(taskDir, "questioning-report.json")), false);
   assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "questioning-report.json")), true);
   assert.equal(await exists(path.join(taskDir, "artifacts", "by-node", "02-QUESTIONING", "done", "goal-contract.json")), true);
 
@@ -175,7 +177,7 @@ test("controller rejects corrupted artifact manifests", async () => {
 
     const validation = runController(root, ["artifacts", "validate", "T-bad-layout", "--format", "json"]);
     assert.notEqual(validation.status, 0);
-    assert.match(validation.stdout, /artifact-index\.json layout must be by-node-v1/);
+    assert.match(validation.stdout, /artifact-index\.json layout must be by-node-v2/);
   }
 });
 
@@ -315,6 +317,7 @@ test("controller maintains artifact layout for main execution nodes", async () =
   assert.equal(runController(root, ["advance", "--event", "verification_passed"]).status, 0);
   await writeArtifact(taskDir, "direction-evaluation.json", "{}\n");
   assert.equal(runController(root, ["advance", "--event", "milestone_completed"]).status, 0);
+  await writeArtifact(taskDir, "direction-evaluation.json", "{}\n");
   assert.equal(runController(root, ["advance", "--event", "direction_final"]).status, 0);
   await writeArtifact(taskDir, "final-report.md", "final\n");
   assert.equal(runController(root, ["advance", "--event", "final_summarized"]).status, 0);

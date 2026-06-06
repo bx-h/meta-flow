@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 from controller import ROOT, read_raw_request, start_task, tasks_root
 
