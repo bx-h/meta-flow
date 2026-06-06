@@ -1,19 +1,18 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { runDoctor, doctorHelp } from "./commands/doctor.js";
 import { runInstall, installHelp } from "./commands/install.js";
 import { runPrintPaths, printPathsHelp } from "./commands/print_paths.js";
 import { runRuntimeCommand, runtimeHelp } from "./commands/runtime.js";
 import { runUninstall, uninstallHelp } from "./commands/uninstall.js";
 import { runVerify } from "./commands/verify.js";
-import { packageRoot } from "./lib/paths.js";
+import { META_FLOW_VERSION } from "./lib/version.js";
 
 const COMMANDS = {
   install: { run: runInstall, help: installHelp },
   uninstall: { run: runUninstall, help: uninstallHelp },
   doctor: { run: runDoctor, help: doctorHelp },
   verify: { run: runVerify, help: () => "Usage: meta-flow verify" },
-  "print-paths": { run: runPrintPaths, help: printPathsHelp }
+  "print-paths": { run: runPrintPaths, help: printPathsHelp },
+  version: { run: runVersion, help: () => "Usage: meta-flow version" }
 };
 
 export async function main(argv = []) {
@@ -22,9 +21,7 @@ export async function main(argv = []) {
     return 0;
   }
   if (argv.includes("--version")) {
-    const packageJson = JSON.parse(await fs.readFile(path.join(packageRoot, "package.json"), "utf8"));
-    console.log(packageJson.version);
-    return 0;
+    return runVersion();
   }
   const [command, ...rest] = argv;
   const entry = COMMANDS[command];
@@ -47,6 +44,7 @@ Commands:
   doctor        Check installed state.
   verify        Verify package structure and installer behavior.
   print-paths   Print repo/user scope target paths.
+  version       Show package version.
   start         Start a workflow task in ~/.meta-flow.
   resume        Resume the active workflow task.
   status        Print workflow task status.
@@ -62,4 +60,9 @@ Global:
   --version     Show package version.
 
 ${runtimeHelp()}`;
+}
+
+async function runVersion() {
+  console.log(META_FLOW_VERSION);
+  return 0;
 }

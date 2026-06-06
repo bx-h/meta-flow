@@ -2,7 +2,7 @@
 
 # Meta-Flow Usage And Acceptance Draft
 
-> 注：`0.1.6` 后 runtime task state 默认位于 `~/.meta-flow`，CLI 入口优先使用 `meta-flow ...` / `metaflow ...`，QUESTIONING 阶段更倾向通过 clarification gate 询问用户。本文中早期 workspace-local 表述只作为历史验收背景保留；新增或当前验收以 home runtime、by-node artifact contract 和 clarification gate 为准。
+> 注：`0.1.7` 后 runtime task state 默认位于 `~/.meta-flow`，CLI 入口优先使用 `meta-flow ...` / `metaflow ...`，QUESTIONING 阶段更倾向通过 clarification gate 询问用户。本文中早期 workspace-local 表述只作为历史验收背景保留；新增或当前验收以 home runtime、by-node artifact contract 和 clarification gate 为准。
 
 ## 1. 目的
 
@@ -416,7 +416,7 @@ $meta-workflow start: ...
 
 前置：
 
-- 源码是 `0.1.6`。
+- 源码是 `0.1.7`。
 - 已安装 plugin 或 marketplace 是 `0.1.1`。
 
 用户行为：

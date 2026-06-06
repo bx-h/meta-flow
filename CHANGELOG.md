@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- Add `meta-flow version` / `metaflow version` as explicit version subcommands while keeping `--version`.
+
 ## 0.1.6
 
 - Require a `clarifying_questions` gate before `goal_contract_drafted` when `questioning-report.json` still contains meaningful questions or cannot safely continue without the user.

@@ -7,6 +7,20 @@ import path from "node:path";
 
 const CLI = path.resolve("bin", "meta-flow.js");
 
+test("CLI prints version via flag and subcommand", () => {
+  const flag = spawnSync("node", [CLI, "--version"], {
+    encoding: "utf8"
+  });
+  assert.equal(flag.status, 0);
+  assert.match(flag.stdout, /^\d+\.\d+\.\d+\n$/);
+
+  const command = spawnSync("node", [CLI, "version"], {
+    encoding: "utf8"
+  });
+  assert.equal(command.status, 0);
+  assert.equal(command.stdout, flag.stdout);
+});
+
 test("CLI propagates doctor failure exit code", async () => {
   const target = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-cli-exit-test-"));
   const result = spawnSync("node", [CLI, "doctor", "--scope", "repo", "--target", target], {

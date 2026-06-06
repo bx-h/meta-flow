@@ -2,7 +2,7 @@
 
 # Meta-Flow Redesign Draft
 
-> 注：这是早期重构设计草稿。`0.1.6` 后当前实现优先使用 `meta-flow ...` / `metaflow ...` CLI，runtime task state 默认位于 `~/.meta-flow`，by-node artifact path 同时作为人类视图和机器契约，并在 QUESTIONING 阶段更倾向通过 clarification gate 询问用户。
+> 注：这是早期重构设计草稿。`0.1.7` 后当前实现优先使用 `meta-flow ...` / `metaflow ...` CLI，runtime task state 默认位于 `~/.meta-flow`，by-node artifact path 同时作为人类视图和机器契约，并在 QUESTIONING 阶段更倾向通过 clarification gate 询问用户。
 
 ## 1. 背景和目标
 
@@ -37,7 +37,7 @@ legacy 背景文件一开始误放在安装副本中，现已迁到源码仓库�
 
 本机 user-scope 安装还有版本不一致问题：
 
-- 源码为 `0.1.6`。
+- 源码为 `0.1.7`。
 - 已安装 plugin manifest 和 marketplace 仍为 `0.1.1`。
 - 已安装模板存在校验失败。
 
