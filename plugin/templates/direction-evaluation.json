@@ -1,4 +1,8 @@
 {
+  "producer": {
+    "agent_name": "direction_evaluator",
+    "execution_mode": "spawned_agent"
+  },
   "task_id": "__TASK_ID__",
   "milestone_id": "M1",
   "decision": "continue",

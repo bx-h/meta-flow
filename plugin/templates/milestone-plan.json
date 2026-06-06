@@ -1,4 +1,8 @@
 {
+  "producer": {
+    "agent_name": "planner",
+    "execution_mode": "spawned_agent"
+  },
   "task_id": "__TASK_ID__",
   "milestones": [
     {

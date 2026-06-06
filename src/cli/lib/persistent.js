@@ -18,6 +18,8 @@ ${command}
 
 Use the returned META-FLOW RESUME PACK as the workflow source of truth before acting.
 Tell the user the current user-facing stage, then perform only the bounded next action.
+When the resume pack says \`spawn_agent_required\`, spawn the listed custom agent(s). The main agent must not locally emulate meta-flow roles or write their role-owned artifacts.
+If spawning required agents is unavailable or rejected, stop and tell the user instead of continuing locally.
 Do not start a new meta-flow task, skip phases, or edit ~/.meta-flow/tasks/*/state.json directly.
 If the controller reports no active task, is missing, or returns an error, continue normally and mention the blocker only if it affects the user's request.
 ${PERSISTENT_END}
@@ -91,6 +93,9 @@ export async function inspectPersistentBlock(targets) {
   }
   if (!block.includes("META-FLOW RESUME PACK")) {
     errors.push("persistent block does not instruct Codex to use the resume pack");
+  }
+  if (!block.includes("spawn_agent_required")) {
+    errors.push("persistent block does not enforce spawned role agents");
   }
   return { target: filePath, exists: true, enabled: true, valid: errors.length === 0, errors };
 }

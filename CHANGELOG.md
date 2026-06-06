@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.9
+
+- Make role delegation an explicit runtime contract: controller resume packs now mark role phases as `spawn_agent_required` and list required custom agents.
+- Tighten Skill and persistent instructions so the main agent must not locally emulate meta-flow roles or write role-owned artifacts.
+- Require producer metadata on role-owned artifacts and require review aggregates to contain all four expected reviewer agents.
+- Change artifact-producing role agent templates to `workspace-write` with narrow write-scope instructions, so spawned roles can produce their own artifacts without main-agent copying.
+- Align `TASK_REPAIR` with the `task_decomposer` artifact contract and require role artifacts for role-originated `block` transitions.
+- Add tests for reviewer/adjudicator delegation metadata and installed persistent delegation guidance.
+
 ## 0.1.8
 
 - Add `meta-flow abandon` / `metaflow abandon` to mark a task as abandoned, close active resume, and retain artifacts for audit.

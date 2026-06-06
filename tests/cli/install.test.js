@@ -30,6 +30,8 @@ test("repo install creates plugin, marketplace, agents, and config", async () =>
   assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "controller.py"))));
   assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "validate_goal_contract.py"))));
   assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "aggregate_reviews.py"))));
+  assert.match(installedSkill, /spawn_agent_required/);
+  assert.match(installedSkill, /The main agent must not write reviewer reports/);
 });
 
 test("repo install with persistent adds an idempotent AGENTS managed block", async () => {
@@ -47,6 +49,8 @@ test("repo install with persistent adds an idempotent AGENTS managed block", asy
   assert.match(agents, /meta-flow resume --format codex/);
   assert.match(agents, /python3 \.meta-flow\/scripts\/controller\.py --root .*\.meta-flow resume --format codex/);
   assert.match(agents, /META-FLOW RESUME PACK/);
+  assert.match(agents, /spawn_agent_required/);
+  assert.match(agents, /must not locally emulate meta-flow roles/);
 });
 
 test("repo install refuses unmanaged skill and support conflicts", async () => {

@@ -49,6 +49,10 @@ The controller output must drive the next response:
 
 - Tell the user the current user-facing stage.
 - Do only the next bounded action.
+- Treat `spawn_agent_required` as a hard delegation contract. The main agent is the orchestrator, not a local substitute for workflow roles.
+- When the controller lists `required_agents`, spawn those exact custom agent(s). If spawning is unavailable, blocked by tool policy, or not possible in the current surface, stop and tell the user; do not perform the role locally.
+- Using `$meta-flow` or `meta-flow start/resume` is explicit authorization to spawn the required role agents for this workflow. Do not ask for extra permission before spawning required role agents unless the user explicitly disabled delegation.
+- Require role-owned artifact provenance: JSON artifacts must include `producer.agent_name=<role>` and `producer.execution_mode=spawned_agent`; Markdown artifacts must start with `producer_agent: <role>` and `execution_mode: spawned_agent` frontmatter.
 - Do not directly edit `state.phase`.
 - Write required artifacts to the by-node paths returned by the controller, validate them, then call `meta-flow advance`.
 - During `QUESTIONING`, bias toward asking the user: if `questioning-report.json` contains any `clarifying_questions`, or says `can_continue_without_user_answer=false`, open a `clarifying_questions` gate and wait for the user before `goal_contract_drafted`.
@@ -134,10 +138,10 @@ Stop conditions:
    ```
 
 2. Follow the controller `next_action`.
-3. Invoke `questioner`.
-4. If any meaningful user-answerable uncertainty could change scope, acceptance criteria, risk, UI/UX, dependencies, or implementation direction, put it in `clarifying_questions`, open a `clarifying_questions` gate, and ask the user before continuing. Do this even if the question is not strictly blocking.
-5. Only skip the clarification gate when `clarifying_questions` is empty, `can_continue_without_user_answer=true`, and `assumptions_if_user_does_not_answer` covers any remaining low-impact gaps.
-6. Generate `questioning-report.json` and `goal-contract.json`.
+3. Spawn `questioner`; only the spawned agent may produce `questioning-report.json` and `goal-contract.json`.
+4. If the spawned `questioner` finds any meaningful user-answerable uncertainty that could change scope, acceptance criteria, risk, UI/UX, dependencies, or implementation direction, it must put that uncertainty in `clarifying_questions`; the main agent then opens a `clarifying_questions` gate and asks the user before continuing. Do this even if the question is not strictly blocking.
+5. Only skip the clarification gate when the spawned `questioner` produced `clarifying_questions=[]`, `can_continue_without_user_answer=true`, and `assumptions_if_user_does_not_answer` covers any remaining low-impact gaps.
+6. Use the spawned `questioner` outputs `questioning-report.json` and `goal-contract.json`; do not generate them in the main agent.
 7. Validate it:
 
    ```bash
@@ -156,47 +160,48 @@ Stop conditions:
    meta-flow advance <task-id> --event proposal_started --reason "Proposal research started." || python3 .meta-flow/scripts/controller.py --root ~/.meta-flow advance <task-id> --event proposal_started --reason "Proposal research started."
    ```
 
-10. Invoke `researcher_proposer` to create `proposal.md`.
-11. Invoke `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer`; parallel review is allowed when the environment supports it.
+10. Spawn `researcher_proposer` to create `proposal.md`.
+11. Spawn `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer` as four separate agents; run them in parallel when the environment supports it. The main agent must not write reviewer reports.
 12. Run the mechanical aggregator:
 
    ```bash
    meta-flow aggregate-reviews --reviews-dir <task-dir>/reviews --output <path-from-controller> || python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <path-from-controller>
    ```
 
-13. Invoke `adjudicator`.
+13. Spawn `adjudicator`; the main agent must not write `adjudication-report.json`.
 14. Validate `adjudication-report.json`.
 15. Route through controller events such as `adjudication_accept`, `adjudication_revise`, or `adjudication_ask_user`.
-16. If the decision is `accept`, invoke `proposal_summarizer`.
+16. If the decision is `accept`, spawn `proposal_summarizer`.
 17. Show `proposal-summary.md` to the user, open a `proposal_confirmation` gate, and only after an `accept` gate decision call `proposal_accepted`.
 
 ## Execution Phase Procedure
 
-1. Invoke `planner` to create `milestone-plan.json`.
+1. Spawn `planner` to create `milestone-plan.json`.
 2. Validate it, open a `plan_confirmation` gate, and only after an `accept` gate decision call `plan_accepted`.
 3. Select one current milestone.
-4. Invoke `task_decomposer` to create `task-list.json`.
-5. Validate the task list, then create `task-spec.json` for the selected concrete task before `task_selected`.
+4. Spawn `task_decomposer` to create `task-list.json`.
+5. Validate the task list, then have the spawned `task_decomposer` create `task-spec.json` for the selected concrete task before `task_selected`.
 6. Process concrete tasks by dependency order.
 7. For each concrete task:
-   - Invoke `executor` for exactly one concrete task.
-   - Invoke `result_verifier` for exactly that concrete task.
-   - On `revise`, return to executor for repair, max 2 attempts.
+   - Spawn `executor` for exactly one concrete task.
+   - Spawn `result_verifier` for exactly that concrete task.
+   - On `revise`, spawn `task_decomposer` to update or reselect exactly one task spec from the verifier's minimal repair instructions, then return to `executor`; max 2 attempts.
    - On `block`, stop the milestone and route to adjudicator or user.
-8. After all concrete tasks in a milestone pass, invoke `direction_evaluator`.
+8. After all concrete tasks in a milestone pass, spawn `direction_evaluator`.
 9. Route from `direction-evaluation.json`:
    - `continue`: select next milestone.
    - `replan`: return to `planner` or `task_decomposer`.
    - `adjust_goal`: ask user to confirm a contract patch, then return to proposal phase.
    - `ask_user`: ask user before continuing.
    - `abort`: generate blocked/final report as appropriate.
-10. After all milestones complete, invoke `final_summarizer`.
+10. After all milestones complete, spawn `final_summarizer`.
 11. Show `final-report.md`, open a `final_confirmation` gate, and require final user confirmation.
 12. Mark completion through the controller with `final_accepted` only after an `accept` gate decision; do not edit `state.json` directly.
 
 ## Role Boundaries
 
 - User confirmation gates are not agents.
+- Every non-user role must be executed by its spawned custom agent. The main agent must not emulate role personas or write role-owned artifacts.
 - Reviewers review; they do not decide the route.
 - Adjudicator decides the route; it does not write code or edit proposals.
 - Planner creates milestones; it does not create concrete task specs.

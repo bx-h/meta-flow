@@ -1,3 +1,8 @@
+---
+producer_agent: proposal_summarizer
+execution_mode: spawned_agent
+---
+
 # Proposal Summary
 
 ## What Will Be Done

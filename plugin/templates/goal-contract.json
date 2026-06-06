@@ -1,4 +1,8 @@
 {
+  "producer": {
+    "agent_name": "questioner",
+    "execution_mode": "spawned_agent"
+  },
   "task_id": "__TASK_ID__",
   "raw_user_request": "string",
   "refined_goal": "string",

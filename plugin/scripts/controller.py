@@ -184,8 +184,8 @@ NEXT_ACTION_BY_PHASE = {
     },
     "TASK_REPAIR": {
         "kind": "role",
-        "role": "executor",
-        "instruction": "Run the minimal repair requested by the verifier.",
+        "role": "task_decomposer",
+        "instruction": "Use the verifier's minimal repair instructions to update or reselect exactly one concrete task spec.",
         "completion_event": "task_selected",
     },
     "MILESTONE_COMPLETED": {
@@ -250,6 +250,46 @@ NEXT_ACTION_BY_PHASE = {
     },
 }
 
+ROLE_AGENT_NAMES = {
+    "questioner": ["questioner"],
+    "researcher_proposer": ["researcher_proposer"],
+    "reviewers": ["product_reviewer", "technical_reviewer", "risk_reviewer", "verification_reviewer"],
+    "adjudicator": ["adjudicator"],
+    "proposal_summarizer": ["proposal_summarizer"],
+    "planner": ["planner"],
+    "task_decomposer": ["task_decomposer"],
+    "executor": ["executor"],
+    "result_verifier": ["result_verifier"],
+    "direction_evaluator": ["direction_evaluator"],
+    "final_summarizer": ["final_summarizer"],
+}
+REVIEWER_AGENT_NAMES = ["product_reviewer", "technical_reviewer", "risk_reviewer", "verification_reviewer"]
+JSON_PRODUCER_BY_EVENT = {
+    "goal_contract_drafted": {
+        "questioning-report.json": "questioner",
+        "goal-contract.json": "questioner",
+    },
+    "adjudication_accept": {"adjudication-report.json": "adjudicator"},
+    "adjudication_revise": {"adjudication-report.json": "adjudicator"},
+    "adjudication_ask_user": {"adjudication-report.json": "adjudicator"},
+    "milestone_plan_created": {"milestone-plan.json": "planner"},
+    "tasks_decomposed": {"task-list.json": "task_decomposer"},
+    "task_selected": {"task-spec.json": "task_decomposer"},
+    "task_executed": {"task-execution-report.json": "executor"},
+    "verification_passed": {"task-verification-report.json": "result_verifier"},
+    "verification_revise": {"task-verification-report.json": "result_verifier"},
+    "milestone_completed": {"direction-evaluation.json": "direction_evaluator"},
+    "direction_continue": {"direction-evaluation.json": "direction_evaluator"},
+    "direction_replan": {"direction-evaluation.json": "direction_evaluator"},
+    "direction_adjust_goal": {"direction-evaluation.json": "direction_evaluator"},
+    "direction_final": {"direction-evaluation.json": "direction_evaluator"},
+}
+MARKDOWN_PRODUCER_BY_EVENT = {
+    "proposal_created": {"proposal.md": "researcher_proposer"},
+    "proposal_summarized": {"proposal-summary.md": "proposal_summarizer"},
+    "final_summarized": {"final-report.md": "final_summarizer"},
+}
+
 TRANSITIONS = {
     "start_questioning": {"INTAKE": "QUESTIONING"},
     "goal_contract_drafted": {"QUESTIONING": "GOAL_CONTRACT_DRAFTED"},
@@ -306,6 +346,24 @@ ARTIFACT_SPECS_BY_EVENT = {
     "direction_adjust_goal": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION"}],
     "direction_final": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION"}],
     "final_summarized": [{"name": "final-report.md", "phase": "FINAL_SUMMARY"}],
+}
+
+BLOCK_ARTIFACT_SPECS_BY_PHASE = {
+    "QUESTIONING": [{"name": "questioning-report.json", "phase": "QUESTIONING", "json_producer": "questioner"}],
+    "RESEARCH_AND_PROPOSAL": [{"name": "proposal.md", "phase": "RESEARCH_AND_PROPOSAL", "markdown_producer": "researcher_proposer"}],
+    "PROPOSAL_REVIEW": [{"name": "review-aggregate.json", "phase": "PROPOSAL_REVIEW"}],
+    "ADJUDICATION": [{"name": "adjudication-report.json", "phase": "ADJUDICATION", "json_producer": "adjudicator"}],
+    "PROPOSAL_REWORK": [{"name": "proposal.md", "phase": "PROPOSAL_REWORK", "markdown_producer": "researcher_proposer"}],
+    "PROPOSAL_SUMMARY": [{"name": "proposal-summary.md", "phase": "PROPOSAL_SUMMARY", "markdown_producer": "proposal_summarizer"}],
+    "PLANNING": [{"name": "milestone-plan.json", "phase": "PLANNING", "json_producer": "planner"}],
+    "MILESTONE_SELECTED": [{"name": "task-list.json", "phase": "MILESTONE_SELECTED", "json_producer": "task_decomposer"}],
+    "TASK_DECOMPOSITION": [{"name": "task-spec.json", "phase": "TASK_DECOMPOSITION", "json_producer": "task_decomposer"}],
+    "TASK_EXECUTION": [{"name": "task-execution-report.json", "phase": "TASK_EXECUTION", "json_producer": "executor"}],
+    "TASK_VERIFICATION": [{"name": "task-verification-report.json", "phase": "TASK_VERIFICATION", "json_producer": "result_verifier"}],
+    "TASK_REPAIR": [{"name": "task-spec.json", "phase": "TASK_REPAIR", "json_producer": "task_decomposer"}],
+    "MILESTONE_COMPLETED": [{"name": "direction-evaluation.json", "phase": "MILESTONE_COMPLETED", "json_producer": "direction_evaluator"}],
+    "DIRECTION_EVALUATION": [{"name": "direction-evaluation.json", "phase": "DIRECTION_EVALUATION", "json_producer": "direction_evaluator"}],
+    "FINAL_SUMMARY": [{"name": "final-report.md", "phase": "FINAL_SUMMARY", "markdown_producer": "final_summarizer"}],
 }
 
 REQUIRED_DECIDED_GATE_BY_EVENT = {
@@ -397,6 +455,8 @@ def spec_applies_to_phase(spec: dict[str, Any], from_phase: str | None) -> bool:
 
 
 def artifact_specs_for_event(event: str, from_phase: str | None) -> list[dict[str, Any]]:
+    if event == "block" and from_phase:
+        return BLOCK_ARTIFACT_SPECS_BY_PHASE.get(from_phase, [])
     return [
         spec
         for spec in ARTIFACT_SPECS_BY_EVENT.get(event, [])
@@ -878,12 +938,16 @@ def artifact_exists(task_dir: Path, name: str) -> bool:
 
 
 def artifact_exists_for_spec(task_dir: Path, event: str, from_phase: str | None, spec: dict[str, Any]) -> bool:
+    return artifact_path_for_spec(task_dir, event, from_phase, spec) is not None
+
+
+def artifact_path_for_spec(task_dir: Path, event: str, from_phase: str | None, spec: dict[str, Any]) -> Path | None:
     artifact_phase = artifact_phase_for_spec(spec, from_phase)
     name = spec["name"]
     index = load_artifact_index(task_dir)
     occurrence = artifact_occurrence(index, artifact_phase, "done", name)
     expected_path = display_artifact_path(task_dir, artifact_phase, "done", name, occurrence, event)
-    return latest_existing_path([expected_path, *legacy_artifact_candidates(task_dir, name)]) is not None
+    return latest_existing_path([expected_path, *legacy_artifact_candidates(task_dir, name)])
 
 
 def task_started_before_artifact_adoption(task_dir: Path) -> bool:
@@ -938,6 +1002,130 @@ def missing_required_artifacts(task_dir: Path, event: str, from_phase: str | Non
         if not artifact_exists_for_spec(task_dir, event, from_phase, spec):
             missing.append(name)
     return missing
+
+
+def enforce_role_artifact_producers(task_dir: Path, event: str, from_phase: str | None) -> None:
+    if not artifact_index_path(task_dir).exists():
+        return
+    if task_started_before_artifact_adoption(task_dir):
+        return
+    errors: list[str] = []
+    for spec in artifact_specs_for_event(event, from_phase):
+        name = spec["name"]
+        path = artifact_path_for_spec(task_dir, event, from_phase, spec)
+        if path is None:
+            continue
+        expected_json_agent = spec.get("json_producer") or JSON_PRODUCER_BY_EVENT.get(event, {}).get(name)
+        if expected_json_agent:
+            errors.extend(validate_json_producer(path, expected_json_agent))
+        expected_markdown_agent = spec.get("markdown_producer") or MARKDOWN_PRODUCER_BY_EVENT.get(event, {}).get(name)
+        if expected_markdown_agent:
+            errors.extend(validate_markdown_producer(path, expected_markdown_agent))
+        if name == "review-aggregate.json":
+            errors.extend(validate_review_aggregate(path))
+    if errors:
+        raise SystemExit(f"Cannot advance with {event}; invalid role producer metadata: {'; '.join(errors)}")
+
+
+def validate_json_producer(path: Path, expected_agent: str) -> list[str]:
+    try:
+        data = load_json(path)
+    except Exception as exc:
+        return [f"{path.name} must be valid JSON before producer validation ({exc})"]
+    if not isinstance(data, dict):
+        return [f"{path.name} must be a JSON object"]
+    producer = data.get("producer")
+    if not isinstance(producer, dict):
+        return [f"{path.name}.producer must be an object"]
+    errors = []
+    if producer.get("agent_name") != expected_agent:
+        errors.append(f"{path.name}.producer.agent_name must be {expected_agent}")
+    if producer.get("execution_mode") != "spawned_agent":
+        errors.append(f"{path.name}.producer.execution_mode must be spawned_agent")
+    return errors
+
+
+def validate_markdown_producer(path: Path, expected_agent: str) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---\n"):
+        return [f"{path.name} must start with producer frontmatter"]
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return [f"{path.name} producer frontmatter must be closed"]
+    fields = {}
+    for line in text[4:end].splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip()] = value.strip()
+    errors = []
+    if fields.get("producer_agent") != expected_agent:
+        errors.append(f"{path.name} producer_agent must be {expected_agent}")
+    if fields.get("execution_mode") != "spawned_agent":
+        errors.append(f"{path.name} execution_mode must be spawned_agent")
+    return errors
+
+
+def validate_review_aggregate(path: Path) -> list[str]:
+    try:
+        data = load_json(path)
+    except Exception as exc:
+        return [f"review-aggregate.json must be valid JSON ({exc})"]
+    if not isinstance(data, dict):
+        return ["review-aggregate.json must be a JSON object"]
+    reviewers = data.get("reviewers")
+    if not isinstance(reviewers, list):
+        return ["review-aggregate.json.reviewers must be a list"]
+    errors: list[str] = []
+    seen: list[str] = []
+    for index, item in enumerate(reviewers, start=1):
+        if not isinstance(item, dict):
+            errors.append(f"reviewers[{index}] must be an object")
+            continue
+        reviewer = item.get("reviewer")
+        if not isinstance(reviewer, str) or not reviewer:
+            errors.append(f"reviewers[{index}].reviewer must be a non-empty string")
+            continue
+        seen.append(reviewer)
+        producer = item.get("producer")
+        if not isinstance(producer, dict):
+            errors.append(f"reviewers[{index}].producer must be an object")
+            continue
+        if producer.get("agent_name") != reviewer:
+            errors.append(f"reviewers[{index}].producer.agent_name must match reviewer")
+        if producer.get("execution_mode") != "spawned_agent":
+            errors.append(f"reviewers[{index}].producer.execution_mode must be spawned_agent")
+    expected = set(REVIEWER_AGENT_NAMES)
+    actual = set(seen)
+    missing = sorted(expected - actual)
+    unexpected = sorted(actual - expected)
+    duplicates = sorted({name for name in seen if seen.count(name) > 1})
+    if missing:
+        errors.append(f"review-aggregate.json missing reviewers: {', '.join(missing)}")
+    if unexpected:
+        errors.append(f"review-aggregate.json has unexpected reviewers: {', '.join(unexpected)}")
+    if duplicates:
+        errors.append(f"review-aggregate.json has duplicate reviewers: {', '.join(duplicates)}")
+    return errors
+
+
+def expected_json_producer_for_entry(event_name: str, node: str, name: str) -> str | None:
+    if event_name == "block":
+        return block_spec_producer(node, name, "json_producer")
+    return JSON_PRODUCER_BY_EVENT.get(event_name, {}).get(name)
+
+
+def expected_markdown_producer_for_entry(event_name: str, node: str, name: str) -> str | None:
+    if event_name == "block":
+        return block_spec_producer(node, name, "markdown_producer")
+    return MARKDOWN_PRODUCER_BY_EVENT.get(event_name, {}).get(name)
+
+
+def block_spec_producer(node: str, name: str, key: str) -> str | None:
+    for spec in BLOCK_ARTIFACT_SPECS_BY_PHASE.get(node, []):
+        if spec.get("name") == name and isinstance(spec.get(key), str):
+            return str(spec[key])
+    return None
 
 
 def open_gate(task_dir: Path) -> dict[str, Any] | None:
@@ -1130,7 +1318,7 @@ def completion_events_for_phase(phase: str) -> list[str]:
     completion_event = action.get("completion_event", "")
     if not completion_event:
         return []
-    return [event for event in completion_event.split("|") if event and event != "block"]
+    return [event for event in completion_event.split("|") if event]
 
 
 def expected_artifacts_by_event_for_phase(phase: str) -> dict[str, list[str]]:
@@ -1175,6 +1363,20 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
     state = load_state(task_dir)
     phase = state.get("phase", "UNKNOWN")
     gate = open_gate(task_dir)
+    if gate:
+        next_action = enrich_next_action({
+            "kind": "gate",
+            "role": "user",
+            "instruction": "Ask the user to decide the open gate before spawning any role agent or advancing the workflow.",
+            "completion_event": "gate_decided",
+        })
+    else:
+        next_action = enrich_next_action(NEXT_ACTION_BY_PHASE.get(phase, {
+            "kind": "inspect",
+            "role": "main_agent",
+            "instruction": "Inspect state.json and route manually.",
+            "completion_event": "",
+        }))
     return {
         "task_id": state.get("task_id", task_dir.name),
         "task_dir": str(task_dir),
@@ -1185,12 +1387,7 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
         "current_task_id": state.get("current_task_id"),
         "last_route_decision": state.get("last_route_decision", ""),
         "open_gate": gate,
-        "next_action": NEXT_ACTION_BY_PHASE.get(phase, {
-            "kind": "inspect",
-            "role": "main_agent",
-            "instruction": "Inspect state.json and route manually.",
-            "completion_event": "",
-        }),
+        "next_action": next_action,
         "allowed_user_actions": allowed_user_actions(phase, gate),
         "blocked_issues": collect_blocked_issues(task_dir),
         "artifact_refs": artifact_refs(task_dir),
@@ -1199,6 +1396,33 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
         "expected_artifacts_by_event": expected_artifacts_by_event_for_phase(phase),
         "expected_artifact_paths_by_event": expected_artifact_paths_by_event_for_phase(task_dir, phase),
     }
+
+
+def enrich_next_action(action: dict[str, Any]) -> dict[str, Any]:
+    result = dict(action)
+    role = result.get("role")
+    agents = ROLE_AGENT_NAMES.get(role, [])
+    if result.get("kind") == "role" and agents:
+        result["execution_mode"] = "spawn_agent_required"
+        result["required_agents"] = agents
+        result["parallel_allowed"] = len(agents) > 1
+        result["main_agent_may_execute"] = False
+        result["fallback_if_spawn_unavailable"] = (
+            "Stop and ask the user; do not perform this role locally or write its artifacts from the main agent."
+        )
+    elif result.get("kind") == "gate":
+        result["execution_mode"] = "user_gate"
+        result["required_agents"] = []
+        result["parallel_allowed"] = False
+        result["main_agent_may_execute"] = False
+        result["fallback_if_spawn_unavailable"] = ""
+    else:
+        result["execution_mode"] = "controller_or_none"
+        result["required_agents"] = []
+        result["parallel_allowed"] = False
+        result["main_agent_may_execute"] = True
+        result["fallback_if_spawn_unavailable"] = ""
+    return result
 
 
 def allowed_user_actions(phase: str, gate: dict[str, Any] | None) -> list[str]:
@@ -1220,6 +1444,9 @@ def print_text(payload: dict[str, Any]) -> None:
     print(f"current milestone: {payload['current_milestone_id']}")
     print(f"current task: {payload['current_task_id']}")
     print(f"last route decision: {payload['last_route_decision']}")
+    print(f"next action execution mode: {payload['next_action'].get('execution_mode')}")
+    if payload["next_action"].get("required_agents"):
+        print(f"required spawned agents: {', '.join(payload['next_action']['required_agents'])}")
     print("blocked issues:")
     if payload["blocked_issues"]:
         for issue in payload["blocked_issues"]:
@@ -1250,6 +1477,14 @@ def print_codex(payload: dict[str, Any]) -> None:
     print(f"Next action role: {payload['next_action']['role']}")
     print(f"Next action: {payload['next_action']['instruction']}")
     print(f"Completion event after the bounded step: {payload['next_action']['completion_event']}")
+    print(f"Role execution mode: {payload['next_action'].get('execution_mode')}")
+    if payload["next_action"].get("required_agents"):
+        print(f"Required spawned agent(s): {', '.join(payload['next_action']['required_agents'])}")
+        print("Main-agent boundary: do not perform this role locally and do not write this role's artifacts yourself.")
+        if payload["next_action"].get("parallel_allowed"):
+            print("Parallel delegation: spawn each listed agent separately; run them in parallel when the tool supports it.")
+    if payload["next_action"].get("fallback_if_spawn_unavailable"):
+        print(f"If spawning is unavailable: {payload['next_action']['fallback_if_spawn_unavailable']}")
     print(f"Artifact index: {payload['artifact_index']['index_path']} ({payload['artifact_index']['count']} entries)")
     if payload.get("expected_artifacts_by_event"):
         print("Expected artifacts by completion event:")
@@ -1265,6 +1500,10 @@ def print_codex(payload: dict[str, Any]) -> None:
     print("Instructions for Codex:")
     print("- Tell the user the current user-facing stage before doing work.")
     print("- Do only the next bounded action described above.")
+    print("- For spawn_agent_required actions, spawn the required custom agent(s); the main agent is only the orchestrator.")
+    print("- Do not locally emulate meta-flow roles such as questioner, reviewers, adjudicator, planner, executor, verifier, or summarizers.")
+    print("- If the spawn/subagent tool is unavailable or rejects delegation, stop and report the blocker instead of continuing locally.")
+    print("- The main agent may run controller, validation, and review aggregation scripts after role agents write their artifacts.")
     print("- Write required artifacts to the listed by-node paths, then call meta-flow advance.")
     print("- Do not directly edit state.phase; call meta-flow advance after producing required artifacts.")
     print("- If a gate is open, ask for the user's decision and do not continue until it is decided.")
@@ -1342,6 +1581,7 @@ def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: st
     missing = missing_required_artifacts(task_dir, event, previous)
     if missing:
         raise SystemExit(f"Cannot advance with {event}; missing required artifacts: {', '.join(missing)}")
+    enforce_role_artifact_producers(task_dir, event, previous)
     enforce_questioning_clarification_gate(task_dir, event)
     enforce_gate_requirements(task_dir, event)
     enforce_loop_limits(state, event)
@@ -1596,6 +1836,7 @@ def validate_artifacts(task_dir: Path) -> dict[str, Any]:
     artifacts = validate_artifact_index_header(index, errors)
     layout = index.get("layout")
     by_node_only_layout = layout == ARTIFACT_INDEX_LAYOUT
+    legacy_task = task_started_before_artifact_adoption(task_dir)
 
     seen_sequences = set()
     seen_display_paths = set()
@@ -1646,6 +1887,21 @@ def validate_artifacts(task_dir: Path) -> dict[str, Any]:
             actual_hash = content_sha256(display)
             if isinstance(expected_hash, str) and expected_hash != actual_hash:
                 errors.append(f"display artifact hash mismatch: {entry.get('display_path')}")
+            if not legacy_task:
+                event_name = str(entry.get("event"))
+                name = str(entry.get("name"))
+                node_name = str(entry.get("node"))
+                expected_json_agent = expected_json_producer_for_entry(event_name, node_name, name)
+                if expected_json_agent:
+                    for error in validate_json_producer(display, expected_json_agent):
+                        errors.append(f"{entry.get('display_path')}: {error}")
+                expected_markdown_agent = expected_markdown_producer_for_entry(event_name, node_name, name)
+                if expected_markdown_agent:
+                    for error in validate_markdown_producer(display, expected_markdown_agent):
+                        errors.append(f"{entry.get('display_path')}: {error}")
+                if name == "review-aggregate.json":
+                    for error in validate_review_aggregate(display):
+                        errors.append(f"{entry.get('display_path')}: {error}")
         expected_display = expected_display_path_for_entry(task_dir, entry)
         if expected_display and entry.get("display_path") != expected_display:
             errors.append(f"display path mismatch for {entry.get('name')}: {entry.get('display_path')} != {expected_display}")

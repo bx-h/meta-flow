@@ -5,7 +5,11 @@
     {
       "reviewer": "string",
       "decision": "revise",
-      "confidence": 0.7
+      "confidence": 0.7,
+      "producer": {
+        "agent_name": "string",
+        "execution_mode": "spawned_agent"
+      }
     }
   ],
   "all_blocking_issues": [],

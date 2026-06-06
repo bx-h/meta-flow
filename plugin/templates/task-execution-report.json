@@ -1,4 +1,8 @@
 {
+  "producer": {
+    "agent_name": "executor",
+    "execution_mode": "spawned_agent"
+  },
   "task_id": "__TASK_ID__",
   "milestone_id": "M1",
   "concrete_task_id": "T1",

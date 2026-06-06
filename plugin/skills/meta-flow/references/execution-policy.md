@@ -32,4 +32,4 @@ The verifier:
 
 ## Repair Limit
 
-Each concrete task has at most 2 repair attempts. After that, mark blocked and route to adjudicator or user.
+Each concrete task has at most 2 repair attempts. On verifier `revise`, the task decomposer updates or reselects exactly one task spec from the verifier's minimal repair instructions, then the executor runs that bounded spec. After 2 repair attempts, mark blocked and route to adjudicator or user.

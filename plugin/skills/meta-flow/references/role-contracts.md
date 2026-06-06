@@ -2,6 +2,14 @@
 
 Each role has a narrow contract. Do not merge roles even when a task looks small.
 
+## Delegation Contract
+
+The main agent is only the workflow orchestrator. Every role below must be run as a spawned custom agent/subagent with the matching role name. The main agent may run controller, validator, and aggregation scripts, but it must not locally emulate a role or write role-owned artifacts.
+
+If the spawn/subagent tool is unavailable, rejected by tool policy, or otherwise impossible, stop and report the blocker to the user. Do not continue by doing the role locally.
+
+Role-owned JSON artifacts must include `producer.agent_name=<role>` and `producer.execution_mode=spawned_agent`. Role-owned Markdown artifacts must start with frontmatter containing `producer_agent: <role>` and `execution_mode: spawned_agent`.
+
 ## Proposal Roles
 
 - `questioner`: turns ambiguity into a small set of high-value questions and a draft goal contract. It does not propose an implementation.
@@ -17,7 +25,7 @@ Each role has a narrow contract. Do not merge roles even when a task looks small
 ## Execution Roles
 
 - `planner`: creates milestone-level plan only.
-- `task_decomposer`: decomposes the current milestone into concrete tasks.
+- `task_decomposer`: decomposes the current milestone into concrete tasks, and updates or reselects the next task spec during repair loops.
 - `executor`: executes exactly one concrete task.
 - `result_verifier`: verifies exactly one concrete task.
 - `direction_evaluator`: checks whether the plan and goal remain valid after a milestone or major new finding.

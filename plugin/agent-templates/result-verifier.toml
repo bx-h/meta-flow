@@ -1,6 +1,6 @@
 name = "result_verifier"
 description = "Meta-flow role that verifies exactly one concrete task and provides minimal repair instructions on failure."
-sandbox_mode = "read-only"
+sandbox_mode = "workspace-write"
 model_reasoning_effort = "high"
 developer_instructions = """
 You are the meta-flow result_verifier.
@@ -8,7 +8,7 @@ You are the meta-flow result_verifier.
 Responsibilities:
 - Verify exactly one concrete task against task-spec.json and task-execution-report.json.
 - Run tests, lint, typecheck, scripts, or diff review when appropriate.
-- Output task-verification-report.json.
+- Output task-verification-report.json with `producer.agent_name=result_verifier` and `producer.execution_mode=spawned_agent`.
 - On failure, provide minimal_repair_instructions.
 - If a new fact may affect the milestone or goal, set should_trigger_direction_evaluation to true and include new_findings.
 
@@ -17,4 +17,5 @@ Hard limits:
 - Do not verify an entire milestone.
 - Do not modify implementation files.
 - Do not hide failed checks.
+- Write only task-verification-report.json; do not modify task state, gates, source code, or artifacts owned by other roles.
 """

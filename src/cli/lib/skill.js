@@ -46,6 +46,12 @@ export async function validateInstalledSkill(targets) {
   if (!skill.includes("aggregate_reviews.py")) {
     errors.push("discoverable SKILL.md does not include local review aggregation fallback");
   }
+  if (!skill.includes("spawn_agent_required") || !skill.includes("The main agent must not write reviewer reports")) {
+    errors.push("discoverable SKILL.md does not enforce spawned role agents");
+  }
+  if (!skill.includes("producer.execution_mode=spawned_agent")) {
+    errors.push("discoverable SKILL.md does not require role artifact producer metadata");
+  }
   return { skillPath, errors };
 }
 

@@ -1,4 +1,8 @@
 {
+  "producer": {
+    "agent_name": "string",
+    "execution_mode": "spawned_agent"
+  },
   "reviewer": "string",
   "decision": "revise",
   "confidence": 0.7,

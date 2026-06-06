@@ -41,10 +41,16 @@ test("controller starts active task and emits resume payloads", async () => {
   assert.equal(payload.task_id, "T-observe");
   assert.equal(payload.phase, "QUESTIONING");
   assert.equal(payload.next_action.role, "questioner");
+  assert.equal(payload.next_action.execution_mode, "spawn_agent_required");
+  assert.deepEqual(payload.next_action.required_agents, ["questioner"]);
+  assert.equal(payload.next_action.main_agent_may_execute, false);
 
   const codex = runController(root, ["resume", "--format", "codex"]);
   assert.equal(codex.status, 0, codex.stderr);
   assert.match(codex.stdout, /META-FLOW RESUME PACK/);
+  assert.match(codex.stdout, /Role execution mode: spawn_agent_required/);
+  assert.match(codex.stdout, /Required spawned agent\(s\): questioner/);
+  assert.match(codex.stdout, /do not perform this role locally/);
   assert.match(codex.stdout, /Tell the user the current user-facing stage/);
 });
 
@@ -124,7 +130,7 @@ test("controller advances only through allowed transitions with required artifac
 
   const taskDir = path.join(root, "tasks", "T-auth");
   await writeQuestioningReport(taskDir);
-  await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
+  await fs.writeFile(path.join(taskDir, "goal-contract.json"), jsonArtifact("questioner"));
 
   const advance = runController(root, ["advance", "--event", "goal_contract_drafted", "--reason", "Goal contract drafted.", "--format", "json"]);
   assert.equal(advance.status, 0, advance.stderr);
@@ -160,7 +166,7 @@ test("controller requires a clarification gate when questioning report still has
     assumptions_if_user_does_not_answer: ["Assume a watch command is enough."],
     can_continue_without_user_answer: true
   });
-  await writeJson(path.join(taskDir, "goal-contract.json"), {});
+  await writeJson(path.join(taskDir, "goal-contract.json"), { producer: producer("questioner") });
 
   const withoutGate = runController(root, ["advance", "--event", "goal_contract_drafted"]);
   assert.notEqual(withoutGate.status, 0);
@@ -222,7 +228,7 @@ test("controller validates and migrates legacy tasks without artifact index", as
     ""
   ].join("\n"));
   await fs.writeFile(path.join(taskDir, "raw-request.md"), "legacy request\n");
-  await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
+  await fs.writeFile(path.join(taskDir, "goal-contract.json"), jsonArtifact("questioner"));
 
   const legacyValidation = runController(root, ["artifacts", "validate", "T-legacy", "--format", "json"]);
   assert.equal(legacyValidation.status, 0, legacyValidation.stderr);
@@ -280,21 +286,52 @@ test("controller requires adjudication report for adjudicator ask-user route", a
   const taskDir = path.join(root, "tasks", "T-adjudication-ask");
 
   await writeQuestioningReport(taskDir);
-  await writeArtifact(taskDir, "goal-contract.json", "{}\n");
+  await writeArtifact(taskDir, "goal-contract.json", jsonArtifact("questioner"));
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
-  await writeArtifact(taskDir, "proposal.md", "proposal\n");
+  await writeArtifact(taskDir, "proposal.md", markdownArtifact("researcher_proposer", "proposal\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
+  const reviewStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(reviewStatus.phase, "PROPOSAL_REVIEW");
+  assert.equal(reviewStatus.next_action.execution_mode, "spawn_agent_required");
+  assert.deepEqual(reviewStatus.next_action.required_agents, [
+    "product_reviewer",
+    "technical_reviewer",
+    "risk_reviewer",
+    "verification_reviewer"
+  ]);
+  assert.equal(reviewStatus.next_action.parallel_allowed, true);
+
   await writeArtifact(taskDir, "review-aggregate.json", "{}\n");
+  const invalidAggregate = runController(root, ["advance", "--event", "reviews_aggregated"]);
+  assert.notEqual(invalidAggregate.status, 0);
+  assert.match(`${invalidAggregate.stdout}\n${invalidAggregate.stderr}`, /review-aggregate\.json\.reviewers must be a list/);
+
+  await writeArtifact(taskDir, "review-aggregate.json", reviewAggregateArtifact());
   assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
 
   const status = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(status.phase, "ADJUDICATION");
+  assert.equal(status.next_action.execution_mode, "spawn_agent_required");
+  assert.deepEqual(status.next_action.required_agents, ["adjudicator"]);
+  assert.deepEqual(status.expected_artifacts_by_event.block, ["adjudication-report.json"]);
   assert.deepEqual(status.expected_artifacts_by_event.adjudication_ask_user, ["adjudication-report.json"]);
+  const blockWithoutAdjudicator = runController(root, ["advance", "--event", "block"]);
+  assert.notEqual(blockWithoutAdjudicator.status, 0);
+  assert.match(`${blockWithoutAdjudicator.stdout}\n${blockWithoutAdjudicator.stderr}`, /missing required artifacts: adjudication-report\.json/);
   const missing = runController(root, ["advance", "--event", "adjudication_ask_user"]);
   assert.notEqual(missing.status, 0);
   assert.match(`${missing.stdout}\n${missing.stderr}`, /missing required artifacts: adjudication-report\.json/);
 
   await writeArtifact(taskDir, "adjudication-report.json", "{}\n");
+  const invalidAdjudicationProducer = runController(root, ["advance", "--event", "adjudication_ask_user"]);
+  assert.notEqual(invalidAdjudicationProducer.status, 0);
+  assert.match(`${invalidAdjudicationProducer.stdout}\n${invalidAdjudicationProducer.stderr}`, /adjudication-report\.json\.producer must be an object/);
+  const invalidBlockProducer = runController(root, ["advance", "--event", "block"]);
+  assert.notEqual(invalidBlockProducer.status, 0);
+  assert.match(`${invalidBlockProducer.stdout}\n${invalidBlockProducer.stderr}`, /adjudication-report\.json\.producer must be an object/);
+
+  await writeArtifact(taskDir, "adjudication-report.json", jsonArtifact("adjudicator"));
   const advance = runController(root, ["advance", "--event", "adjudication_ask_user", "--format", "json"]);
   assert.equal(advance.status, 0, advance.stderr);
   assert.equal(JSON.parse(advance.stdout).phase, "QUESTIONING");
@@ -315,6 +352,9 @@ test("controller records human gates without advancing phase", async () => {
   const status = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
   assert.equal(status.open_gate.gate_id, gate.gate_id);
   assert.equal(status.open_gate.type, "proposal_confirmation");
+  assert.equal(status.next_action.execution_mode, "user_gate");
+  assert.deepEqual(status.next_action.required_agents, []);
+  assert.equal(status.next_action.role, "user");
 
   const decide = runController(root, ["gate", "decide", "--gate", gate.gate_id, "--decision", "accept", "--comment", "Looks good", "--format", "json"]);
   assert.equal(decide.status, 0, decide.stderr);
@@ -341,16 +381,16 @@ test("controller requires decided confirmation gates before user acceptance even
   const taskDir = path.join(root, "tasks", "T-confirm");
 
   await writeQuestioningReport(taskDir);
-  await fs.writeFile(path.join(taskDir, "goal-contract.json"), "{}\n");
+  await fs.writeFile(path.join(taskDir, "goal-contract.json"), jsonArtifact("questioner"));
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
-  await fs.writeFile(path.join(taskDir, "proposal.md"), "proposal\n");
+  await fs.writeFile(path.join(taskDir, "proposal.md"), markdownArtifact("researcher_proposer", "proposal\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
-  await fs.writeFile(path.join(taskDir, "review-aggregate.json"), "{}\n");
+  await fs.writeFile(path.join(taskDir, "review-aggregate.json"), reviewAggregateArtifact());
   assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
-  await fs.writeFile(path.join(taskDir, "adjudication-report.json"), "{}\n");
+  await fs.writeFile(path.join(taskDir, "adjudication-report.json"), jsonArtifact("adjudicator"));
   assert.equal(runController(root, ["advance", "--event", "adjudication_accept"]).status, 0);
-  await fs.writeFile(path.join(taskDir, "proposal-summary.md"), "summary\n");
+  await fs.writeFile(path.join(taskDir, "proposal-summary.md"), markdownArtifact("proposal_summarizer", "summary\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_summarized"]).status, 0);
 
   const withoutGate = runController(root, ["advance", "--event", "proposal_accepted"]);
@@ -379,40 +419,40 @@ test("controller maintains artifact layout for main execution nodes", async () =
   const taskDir = path.join(root, "tasks", "T-artifacts");
 
   await writeQuestioningReport(taskDir);
-  await writeArtifact(taskDir, "goal-contract.json", "{}\n");
+  await writeArtifact(taskDir, "goal-contract.json", jsonArtifact("questioner"));
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
-  await writeArtifact(taskDir, "proposal.md", "proposal\n");
+  await writeArtifact(taskDir, "proposal.md", markdownArtifact("researcher_proposer", "proposal\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
-  await writeArtifact(taskDir, "review-aggregate.json", "{}\n");
+  await writeArtifact(taskDir, "review-aggregate.json", reviewAggregateArtifact());
   assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
   const adjudicationStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
   assert.deepEqual(adjudicationStatus.expected_artifacts_by_event.adjudication_accept, ["adjudication-report.json"]);
   assert.deepEqual(adjudicationStatus.expected_artifacts_by_event.adjudication_revise, ["adjudication-report.json"]);
-  await writeArtifact(taskDir, "adjudication-report.json", "{}\n");
+  await writeArtifact(taskDir, "adjudication-report.json", jsonArtifact("adjudicator"));
   assert.equal(runController(root, ["advance", "--event", "adjudication_accept"]).status, 0);
-  await writeArtifact(taskDir, "proposal-summary.md", "summary\n");
+  await writeArtifact(taskDir, "proposal-summary.md", markdownArtifact("proposal_summarizer", "summary\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_summarized"]).status, 0);
   await decideAcceptGate(root, "proposal_confirmation", "Accept proposal?");
   assert.equal(runController(root, ["advance", "--event", "proposal_accepted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "planning_started"]).status, 0);
-  await writeArtifact(taskDir, "milestone-plan.json", "{}\n");
+  await writeArtifact(taskDir, "milestone-plan.json", jsonArtifact("planner"));
   assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
   await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
   assert.equal(runController(root, ["advance", "--event", "plan_accepted"]).status, 0);
-  await writeArtifact(taskDir, "task-list.json", "{}\n");
+  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer"));
   assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
-  await writeArtifact(taskDir, "task-spec.json", "{}\n");
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer"));
   assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
-  await writeArtifact(taskDir, "task-execution-report.json", "{}\n");
+  await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor"));
   assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
-  await writeArtifact(taskDir, "task-verification-report.json", "{}\n");
+  await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier"));
   assert.equal(runController(root, ["advance", "--event", "verification_passed"]).status, 0);
-  await writeArtifact(taskDir, "direction-evaluation.json", "{}\n");
+  await writeArtifact(taskDir, "direction-evaluation.json", jsonArtifact("direction_evaluator"));
   assert.equal(runController(root, ["advance", "--event", "milestone_completed"]).status, 0);
-  await writeArtifact(taskDir, "direction-evaluation.json", "{}\n");
+  await writeArtifact(taskDir, "direction-evaluation.json", jsonArtifact("direction_evaluator"));
   assert.equal(runController(root, ["advance", "--event", "direction_final"]).status, 0);
-  await writeArtifact(taskDir, "final-report.md", "final\n");
+  await writeArtifact(taskDir, "final-report.md", markdownArtifact("final_summarizer", "final\n"));
   assert.equal(runController(root, ["advance", "--event", "final_summarized"]).status, 0);
   const finalGate = await decideAcceptGate(root, "final_confirmation", "Accept final?");
   assert.equal(runController(root, ["advance", "--event", "final_accepted"]).status, 0);
@@ -447,42 +487,47 @@ test("controller keeps repeated loop artifacts distinct and records repair node 
   const taskDir = path.join(root, "tasks", "T-loop");
 
   await writeQuestioningReport(taskDir);
-  await writeArtifact(taskDir, "goal-contract.json", "{}\n");
+  await writeArtifact(taskDir, "goal-contract.json", jsonArtifact("questioner"));
   assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
-  await writeArtifact(taskDir, "proposal.md", "proposal\n");
+  await writeArtifact(taskDir, "proposal.md", markdownArtifact("researcher_proposer", "proposal\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
-  await writeArtifact(taskDir, "review-aggregate.json", "{}\n");
+  await writeArtifact(taskDir, "review-aggregate.json", reviewAggregateArtifact());
   assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
-  await writeArtifact(taskDir, "adjudication-report.json", "{}\n");
+  await writeArtifact(taskDir, "adjudication-report.json", jsonArtifact("adjudicator"));
   assert.equal(runController(root, ["advance", "--event", "adjudication_accept"]).status, 0);
-  await writeArtifact(taskDir, "proposal-summary.md", "summary\n");
+  await writeArtifact(taskDir, "proposal-summary.md", markdownArtifact("proposal_summarizer", "summary\n"));
   assert.equal(runController(root, ["advance", "--event", "proposal_summarized"]).status, 0);
   await decideAcceptGate(root, "proposal_confirmation", "Accept proposal?");
   assert.equal(runController(root, ["advance", "--event", "proposal_accepted"]).status, 0);
   assert.equal(runController(root, ["advance", "--event", "planning_started"]).status, 0);
-  await writeArtifact(taskDir, "milestone-plan.json", "{}\n");
+  await writeArtifact(taskDir, "milestone-plan.json", jsonArtifact("planner"));
   assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
   await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
   assert.equal(runController(root, ["advance", "--event", "plan_accepted"]).status, 0);
-  await writeArtifact(taskDir, "task-list.json", "{}\n");
+  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer"));
   assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
-  await writeArtifact(taskDir, "task-spec.json", "{\"attempt\":0}\n");
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { attempt: 0 }));
   assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
-  await writeArtifact(taskDir, "task-execution-report.json", "{\"attempt\":0}\n");
+  await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor", { attempt: 0 }));
   assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
 
   const verificationStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
   assert.deepEqual(verificationStatus.expected_artifacts_by_event.verification_passed, ["task-verification-report.json"]);
   assert.deepEqual(verificationStatus.expected_artifacts_by_event.verification_revise, ["task-verification-report.json"]);
 
-  await writeArtifact(taskDir, "task-verification-report.json", "{\"decision\":\"revise\",\"attempt\":1}\n");
+  await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier", { decision: "revise", attempt: 1 }));
   assert.equal(runController(root, ["advance", "--event", "verification_revise"]).status, 0);
-  await writeArtifact(taskDir, "task-spec.json", "{\"attempt\":1}\n");
+  const repairStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(repairStatus.phase, "TASK_REPAIR");
+  assert.equal(repairStatus.next_action.execution_mode, "spawn_agent_required");
+  assert.deepEqual(repairStatus.next_action.required_agents, ["task_decomposer"]);
+  assert.deepEqual(repairStatus.expected_artifacts_by_event.task_selected, ["task-spec.json"]);
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { attempt: 1 }));
   assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
-  await writeArtifact(taskDir, "task-execution-report.json", "{\"attempt\":1}\n");
+  await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor", { attempt: 1 }));
   assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
-  await writeArtifact(taskDir, "task-verification-report.json", "{\"decision\":\"revise\",\"attempt\":2}\n");
+  await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier", { decision: "revise", attempt: 2 }));
   assert.equal(runController(root, ["advance", "--event", "verification_revise"]).status, 0);
 
   const validation = runController(root, ["artifacts", "validate", "T-loop", "--format", "json"]);
@@ -528,6 +573,7 @@ async function writeArtifact(taskDir, name, content) {
 
 async function writeQuestioningReport(taskDir, overrides = {}) {
   await writeJson(path.join(taskDir, "questioning-report.json"), {
+    producer: producer("questioner"),
     task_id: path.basename(taskDir),
     raw_user_request: "test request",
     known_information: [],
@@ -537,6 +583,38 @@ async function writeQuestioningReport(taskDir, overrides = {}) {
     can_continue_without_user_answer: true,
     ...overrides
   });
+}
+
+function producer(agentName) {
+  return {
+    agent_name: agentName,
+    execution_mode: "spawned_agent"
+  };
+}
+
+function jsonArtifact(agentName, data = {}) {
+  return `${JSON.stringify({ producer: producer(agentName), ...data }, null, 2)}\n`;
+}
+
+function markdownArtifact(agentName, body) {
+  return `---\nproducer_agent: ${agentName}\nexecution_mode: spawned_agent\n---\n\n${body}`;
+}
+
+function reviewAggregateArtifact() {
+  const reviewers = ["product_reviewer", "technical_reviewer", "risk_reviewer", "verification_reviewer"].map((reviewer) => ({
+    reviewer,
+    decision: "pass",
+    confidence: 0.9,
+    producer: producer(reviewer)
+  }));
+  return `${JSON.stringify({
+    task_id: "test",
+    overall_mechanical_result: "pass",
+    reviewers,
+    all_blocking_issues: [],
+    all_suggested_changes: [],
+    all_missing_information: []
+  }, null, 2)}\n`;
 }
 
 async function writeJson(filePath, data) {

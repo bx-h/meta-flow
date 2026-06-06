@@ -1,3 +1,8 @@
+---
+producer_agent: researcher_proposer
+execution_mode: spawned_agent
+---
+
 # Proposal
 
 ## Goal

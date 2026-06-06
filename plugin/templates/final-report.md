@@ -1,3 +1,8 @@
+---
+producer_agent: final_summarizer
+execution_mode: spawned_agent
+---
+
 # Final Report
 
 ## Completed

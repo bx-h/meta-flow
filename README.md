@@ -32,7 +32,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.8 install --scope repo
+npx @bx-h/meta-flow@0.1.9 install --scope repo
 ```
 
 ## Quick Start
@@ -60,6 +60,12 @@ meta-flow doctor --scope repo
 ```
 
 Meta Flow keeps runtime state in `~/.meta-flow/active-task.json`, `~/.meta-flow/task-index.json`, and `~/.meta-flow/tasks/<task-id>/` by default. Override with `META_FLOW_ROOT` or command-scoped `--root <path>` such as `meta-flow status --root <path>` only when you intentionally want an isolated runtime. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names. Business artifacts live under stable by-node machine paths such as `artifacts/by-node/<order>-<phase>/<status>/<artifact>`, and `artifact-index.json` records the contract, hash, event, node, and retry metadata.
+
+Role phases are delegated work, not local personas. When the controller reports `spawn_agent_required`, the main agent must spawn the listed custom agent(s), such as `product_reviewer`, `technical_reviewer`, `risk_reviewer`, `verification_reviewer`, or `adjudicator`. If spawning is unavailable or rejected, the workflow must stop and report that blocker instead of doing the role locally.
+
+The runtime also checks role-owned artifact producer metadata. JSON role artifacts must include `producer.agent_name` and `producer.execution_mode=spawned_agent`; Markdown role artifacts must start with matching producer frontmatter. Review aggregation requires the four expected reviewer agents, each with spawned-agent producer metadata.
+Artifact-producing role agent templates use `workspace-write` so the spawned role can write its own artifact. Their instructions restrict the write scope to the assigned artifact(s), with implementation edits reserved for the `executor` role.
+When a role phase advances to `BLOCKED`, the controller still requires that phase's role artifact where one exists, so `block` cannot be used to skip spawned reviewer/adjudicator/verifier work.
 
 To stop a task because the user no longer wants to continue it, run `meta-flow abandon [task-id] --reason "<why>"`. This marks the task `abandoned`, removes the active resume pointer, closes open gates as aborted, updates the task index, and keeps artifacts for audit. `meta-flow deactivate [task-id]` is weaker: it only clears `active-task.json` and leaves the task state unchanged, which is useful for context switching but not for abandonment.
 
@@ -184,7 +190,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.8
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.9
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.

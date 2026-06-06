@@ -11,6 +11,7 @@ from _common import fail, load_json, write_json
 
 
 VALID_DECISIONS = {"pass", "revise", "block"}
+EXPECTED_REVIEWERS = {"product_reviewer", "technical_reviewer", "risk_reviewer", "verification_reviewer"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,6 +45,7 @@ def main() -> int:
     missing: list[str] = []
     task_id = args.task_id
     decisions: list[str] = []
+    seen_reviewers: list[str] = []
 
     for path in paths:
         report = load_json(path)
@@ -55,12 +57,24 @@ def main() -> int:
         confidence = report.get("confidence")
         if not isinstance(reviewer, str) or not reviewer.strip():
             errors.append(f"{path}: reviewer must be a non-empty string")
+        else:
+            seen_reviewers.append(reviewer)
+            if reviewer not in EXPECTED_REVIEWERS:
+                errors.append(f"{path}: reviewer must be one of {sorted(EXPECTED_REVIEWERS)}")
         if decision not in VALID_DECISIONS:
             errors.append(f"{path}: decision must be one of {sorted(VALID_DECISIONS)}")
         else:
             decisions.append(decision)
         if not isinstance(confidence, (int, float)) or not 0 <= float(confidence) <= 1:
             errors.append(f"{path}: confidence must be a number between 0 and 1")
+        producer = report.get("producer")
+        if not isinstance(producer, dict):
+            errors.append(f"{path}: producer must be an object")
+        else:
+            if producer.get("agent_name") != reviewer:
+                errors.append(f"{path}: producer.agent_name must match reviewer")
+            if producer.get("execution_mode") != "spawned_agent":
+                errors.append(f"{path}: producer.execution_mode must be spawned_agent")
         for key, sink in (
             ("blocking_issues", blocking),
             ("suggested_changes", suggested),
@@ -73,7 +87,14 @@ def main() -> int:
                 sink.extend(str(item) for item in value)
         if not task_id and isinstance(report.get("task_id"), str):
             task_id = str(report["task_id"])
-        reviewers.append({"reviewer": reviewer, "decision": decision, "confidence": confidence})
+        reviewers.append({"reviewer": reviewer, "decision": decision, "confidence": confidence, "producer": producer})
+
+    missing_reviewers = sorted(EXPECTED_REVIEWERS - set(seen_reviewers))
+    unexpected_duplicates = sorted({name for name in seen_reviewers if seen_reviewers.count(name) > 1})
+    if missing_reviewers:
+        errors.append(f"missing reviewer reports: {', '.join(missing_reviewers)}")
+    if unexpected_duplicates:
+        errors.append(f"duplicate reviewer reports: {', '.join(unexpected_duplicates)}")
 
     if errors:
         fail(errors)

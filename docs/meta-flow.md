@@ -105,6 +105,8 @@ Concrete-task grain gives:
 - focused evidence
 - easier rollback
 
+On a verifier `revise`, `TASK_REPAIR` is owned by `task_decomposer`: it updates or reselects one bounded `task-spec.json` from the verifier's minimal repair instructions, then the workflow returns to `TASK_EXECUTION` for the executor to run that spec.
+
 ## Adjudicator Versus Reviewers
 
 Reviewers provide evidence and a local decision: `pass`, `revise`, or `block`. They do not route the workflow.

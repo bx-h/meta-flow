@@ -72,10 +72,14 @@ export async function uninstallAgents(targets, options = {}) {
 export async function validateAgentTemplate(filePath) {
   const text = await fs.readFile(filePath, "utf8");
   const missing = [];
-  for (const key of ["name", "description", "developer_instructions"]) {
+  for (const key of ["name", "description", "sandbox_mode", "developer_instructions"]) {
     if (!new RegExp(`^\\s*${key}\\s*=`, "m").test(text)) {
       missing.push(key);
     }
+  }
+  const writesRoleArtifact = text.includes("producer.agent_name") || text.includes("producer_agent:");
+  if (writesRoleArtifact && !/^\s*sandbox_mode\s*=\s*"workspace-write"/m.test(text)) {
+    missing.push("sandbox_mode=workspace-write");
   }
   return { filePath, missing };
 }

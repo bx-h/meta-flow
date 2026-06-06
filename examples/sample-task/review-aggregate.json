@@ -5,22 +5,38 @@
     {
       "reviewer": "product_reviewer",
       "decision": "pass",
-      "confidence": 0.86
+      "confidence": 0.86,
+      "producer": {
+        "agent_name": "product_reviewer",
+        "execution_mode": "spawned_agent"
+      }
     },
     {
       "reviewer": "risk_reviewer",
       "decision": "pass",
-      "confidence": 0.8
+      "confidence": 0.8,
+      "producer": {
+        "agent_name": "risk_reviewer",
+        "execution_mode": "spawned_agent"
+      }
     },
     {
       "reviewer": "technical_reviewer",
       "decision": "pass",
-      "confidence": 0.82
+      "confidence": 0.82,
+      "producer": {
+        "agent_name": "technical_reviewer",
+        "execution_mode": "spawned_agent"
+      }
     },
     {
       "reviewer": "verification_reviewer",
       "decision": "pass",
-      "confidence": 0.88
+      "confidence": 0.88,
+      "producer": {
+        "agent_name": "verification_reviewer",
+        "execution_mode": "spawned_agent"
+      }
     }
   ],
   "all_blocking_issues": [],

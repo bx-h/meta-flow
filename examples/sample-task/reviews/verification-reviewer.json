@@ -1,5 +1,9 @@
 {
   "task_id": "sample-health-check",
+  "producer": {
+    "agent_name": "verification_reviewer",
+    "execution_mode": "spawned_agent"
+  },
   "reviewer": "verification_reviewer",
   "decision": "pass",
   "confidence": 0.88,
