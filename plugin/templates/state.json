@@ -1,23 +1,30 @@
 {
   "task_id": "__TASK_ID__",
-  "phase": "INTAKE",
+  "phase": "QUESTIONING",
   "created_at": "__CREATED_AT__",
   "updated_at": "__UPDATED_AT__",
   "proposal_review_round": 0,
   "direction_adjustment_round": 0,
+  "task_repair_attempts": {},
   "current_milestone_id": null,
   "current_task_id": null,
   "max_proposal_rework_rounds": 3,
   "max_task_repair_rounds": 2,
   "max_direction_adjustment_rounds": 2,
   "status": "active",
-  "last_route_decision": "Task initialized.",
+  "last_route_decision": "Raw request captured; goal clarification started.",
   "history": [
     {
       "at": "__CREATED_AT__",
       "from_phase": "NONE",
       "to_phase": "INTAKE",
       "reason": "Raw request captured."
+    },
+    {
+      "at": "__CREATED_AT__",
+      "from_phase": "INTAKE",
+      "to_phase": "QUESTIONING",
+      "reason": "Goal clarification started."
     }
   ]
 }

@@ -2,6 +2,7 @@ import { parseOptions, helpRequested } from "../lib/args.js";
 import { uninstallAgents } from "../lib/agents.js";
 import { createLogger } from "../lib/logger.js";
 import { uninstallMarketplace } from "../lib/marketplace.js";
+import { uninstallPersistentBlock } from "../lib/persistent.js";
 import { uninstallPlugin } from "../lib/plugin.js";
 import { resolveTargets } from "../lib/paths.js";
 import { uninstallSkill } from "../lib/skill.js";
@@ -40,6 +41,7 @@ export async function runUninstall(argv = []) {
   console.log(`- remove support scripts/templates: ${targets.supportTarget}`);
   console.log(`- update marketplace: ${targets.marketplaceTarget}`);
   console.log(`- remove marked agents: ${targets.agentsTarget}`);
+  console.log(`- remove AGENTS.md persistent block if present: ${targets.agentsMdTarget}`);
   console.log(`- keep tasks: ${targets.tasksTarget}`);
 
   if (!dryRun && !options.yes) {
@@ -64,6 +66,10 @@ export async function runUninstall(argv = []) {
   const agentResult = await uninstallAgents(targets, { dryRun, logger });
   for (const skipped of agentResult.skipped) {
     logger.warn(`agent file has no meta-flow marker; skipped: ${skipped}`);
+  }
+  const persistentResult = await uninstallPersistentBlock(targets, { dryRun, logger });
+  if (persistentResult.skipped) {
+    logger.warn(`AGENTS.md persistent block is incomplete; skipped: ${persistentResult.error}`);
   }
   console.log("Uninstall complete. User task data was not deleted.");
   return 0;

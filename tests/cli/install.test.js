@@ -12,15 +12,33 @@ test("repo install creates plugin, marketplace, agents, and config", async () =>
   assert.equal(await exists(path.join(target, "plugins", "meta-flow", ".codex-plugin", "plugin.json")), true);
   assert.equal(await exists(path.join(target, ".agents", "skills", "meta-flow", "SKILL.md")), true);
   assert.equal(await exists(path.join(target, ".agents", "skills", "meta-flow", ".meta-flow-managed.json")), true);
+  assert.equal(await exists(path.join(target, ".meta-flow", "scripts", "controller.py")), true);
   assert.equal(await exists(path.join(target, ".meta-flow", "scripts", "new_task.py")), true);
   assert.equal(await exists(path.join(target, ".meta-flow", "scripts", ".meta-flow-managed.json")), true);
   assert.equal(await exists(path.join(target, ".meta-flow", "templates", "state.json")), true);
   assert.equal(await exists(path.join(target, ".meta-flow", "templates", ".meta-flow-managed.json")), true);
   assert.equal(await exists(path.join(target, ".codex", "agents", "questioner.toml")), true);
   assert.equal(await exists(path.join(target, ".codex", "config.toml")), true);
+  assert.equal(await exists(path.join(target, "AGENTS.md")), false);
 
   const marketplace = JSON.parse(await fs.readFile(path.join(target, ".agents", "plugins", "marketplace.json"), "utf8"));
   assert.equal(marketplace.plugins.filter((plugin) => plugin.name === "meta-flow").length, 1);
+});
+
+test("repo install with persistent adds an idempotent AGENTS managed block", async () => {
+  const target = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-persistent-install-test-"));
+  await fs.writeFile(path.join(target, "AGENTS.md"), "# Existing Instructions\n\nKeep this line.\n", "utf8");
+
+  await runInstall(["--scope", "repo", "--target", target, "--persistent", "--yes"]);
+  await runInstall(["--scope", "repo", "--target", target, "--persistent", "--yes"]);
+
+  const agents = await fs.readFile(path.join(target, "AGENTS.md"), "utf8");
+  assert.match(agents, /# Existing Instructions/);
+  assert.match(agents, /Keep this line\./);
+  assert.equal(agents.match(/meta-flow:persistent:start/g).length, 1);
+  assert.equal(agents.match(/meta-flow:persistent:end/g).length, 1);
+  assert.match(agents, /python3 \.meta-flow\/scripts\/controller\.py resume --format codex/);
+  assert.match(agents, /META-FLOW RESUME PACK/);
 });
 
 test("repo install refuses unmanaged skill and support conflicts", async () => {

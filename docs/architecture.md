@@ -28,10 +28,24 @@ The plugin manifest does not automatically materialize these files for `$meta-fl
 - `plugin/skills/meta-flow/SKILL.md`: workflow entrypoint.
 - `plugin/skills/meta-flow/references/`: role, review, adjudication, execution, and direction-evaluation policies.
 - `plugin/templates/`: task state and report schemas.
-- `plugin/scripts/`: standard-library Python helpers for new tasks, validation, aggregation, and status.
+- `plugin/scripts/`: standard-library Python helpers for controller routing, new tasks, validation, aggregation, and status.
 - `plugin/agent-templates/`: source TOML for custom agents.
 
 During install, runtime support files are also copied to `.meta-flow/scripts` and `.meta-flow/templates` so the discoverable Skill can call local validation helpers.
+
+## Runtime Controller
+
+Meta Flow is a long-running workflow, so the Skill is only the entrypoint. The runtime source of truth is `controller.py` plus workspace state files:
+
+- `.meta-flow/active-task.json`: the current resumable task pointer.
+- `.meta-flow/task-index.json`: task list and latest known status.
+- `.meta-flow/tasks/<task-id>/state.json`: current workflow snapshot.
+- `.meta-flow/tasks/<task-id>/events.ndjson`: append-only transition history.
+- `.meta-flow/tasks/<task-id>/gates/*.json`: human confirmation points.
+
+Codex should ask the controller for `resume --format codex` before continuing a meta-flow task. The controller returns the internal phase, user-facing stage, next bounded action, open gate, and allowed user actions. Codex explains that stage to the user and advances only through controller-approved transitions.
+
+Persistent mode is a Codex-native opt-in. `meta-flow install --persistent` writes a managed block to `AGENTS.md` that tells Codex to run `controller.py resume --format codex` whenever `.meta-flow/active-task.json` exists. This is the durable surface that prevents the workflow from depending on a Skill staying sticky across turns. The default install does not modify `AGENTS.md`; users can still continue manually with `$meta-flow resume`.
 
 ## Repo Scope Versus User Scope
 

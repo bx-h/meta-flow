@@ -10,6 +10,12 @@ Repo scope:
 npx @bx-h/meta-flow@latest install --scope repo
 ```
 
+Repo scope with automatic active-task resume:
+
+```bash
+npx @bx-h/meta-flow@latest install --scope repo --persistent
+```
+
 User scope:
 
 ```bash
@@ -36,14 +42,24 @@ npx @bx-h/meta-flow@0.1.2 install --scope repo
 3. In Codex, say:
 
 ```text
-Use $meta-flow for this request: "I want to improve our backend observability but I'm not sure where to start."
+$meta-flow start: "I want to improve our backend observability but I'm not sure where to start."
 ```
+
+To continue an existing task, say:
+
+```text
+$meta-flow resume
+```
+
+If you installed with `--persistent`, Codex will check `.meta-flow/active-task.json` from `AGENTS.md` and ask the controller for the current node before acting. Without `--persistent`, use `$meta-flow resume` when you want to continue.
 
 You can check installation state with:
 
 ```bash
 meta-flow doctor --scope repo
 ```
+
+Meta Flow keeps runtime state in `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, and `.meta-flow/tasks/<task-id>/`. The controller tells Codex the current workflow node and next action; users do not need to know internal phase names.
 
 ## When To Use It
 
@@ -120,6 +136,9 @@ Repo scope writes under the target repo:
 - `<repo>/.agents/skills/meta-flow`
 - `<repo>/.meta-flow/scripts`
 - `<repo>/.meta-flow/templates`
+- `<repo>/.meta-flow/active-task.json`
+- `<repo>/.meta-flow/task-index.json`
+- `<repo>/.meta-flow/tasks`
 - `<repo>/.agents/plugins/marketplace.json`
 - `<repo>/.codex/agents/*.toml`
 - `<repo>/.codex/config.toml`
@@ -130,6 +149,9 @@ User scope writes under the current user home:
 - `~/.agents/skills/meta-flow`
 - `~/.meta-flow/scripts`
 - `~/.meta-flow/templates`
+- workspace `.meta-flow/active-task.json`
+- workspace `.meta-flow/task-index.json`
+- workspace `.meta-flow/tasks`
 - `~/.agents/plugins/marketplace.json`
 - `~/.codex/agents/*.toml`
 - `~/.codex/config.toml`
@@ -153,6 +175,7 @@ meta-flow uninstall --scope repo --dry-run
 
 - No `postinstall` script modifies your system.
 - The installer writes files only after explicit `meta-flow install`.
+- `AGENTS.md` is changed only when `meta-flow install --persistent` is explicitly requested.
 - No telemetry is collected.
 - User code, config, and task content are not uploaded.
 - Use `--dry-run` before installing.

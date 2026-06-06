@@ -6,6 +6,7 @@ import { patchCodexConfig } from "../lib/codex_config.js";
 import { backupIfExists } from "../lib/fs_safe.js";
 import { createLogger } from "../lib/logger.js";
 import { updateMarketplace } from "../lib/marketplace.js";
+import { installPersistentBlock } from "../lib/persistent.js";
 import { installPlugin } from "../lib/plugin.js";
 import { resolveTargets } from "../lib/paths.js";
 import { installSkill } from "../lib/skill.js";
@@ -21,6 +22,7 @@ Options:
   --yes             Skip confirmation prompts.
   --no-agents       Do not install custom agent TOML files.
   --no-plugin       Do not install the Codex plugin files.
+  --persistent      Add an AGENTS.md managed block so Codex auto-resumes active tasks.
   --backup          Backup existing managed files before update.
   --verbose         Print detailed actions.`;
 }
@@ -42,10 +44,12 @@ export async function runInstall(argv = []) {
   const backup = Boolean(options.backup);
   const installPluginEnabled = options.plugin !== false;
   const installAgentsEnabled = options.agents !== false;
+  const installPersistentEnabled = Boolean(options.persistent);
 
   printInstallPlan(targets, {
     installPluginEnabled,
     installAgentsEnabled,
+    installPersistentEnabled,
     dryRun
   });
 
@@ -97,10 +101,21 @@ export async function runInstall(argv = []) {
     logger.warn(warning);
   }
 
+  if (installPersistentEnabled) {
+    if (targets.scope === "user") {
+      logger.warn("user-scope persistent mode writes AGENTS.md under your home directory and can affect every workspace below it.");
+    }
+    await installPersistentBlock(targets, { dryRun, backup, logger });
+  }
+
   console.log("\nNext:");
   console.log("1. Restart Codex.");
   console.log(`2. Run: meta-flow doctor --scope ${scope}${scope === "repo" ? ` --target ${targets.target}` : ""}`);
-  console.log("3. In Codex, mention: $meta-flow");
+  if (installPersistentEnabled) {
+    console.log("3. Codex will auto-check active meta-flow tasks from AGENTS.md.");
+  } else {
+    console.log("3. In Codex, mention: $meta-flow. For automatic resume, reinstall with --persistent.");
+  }
   return 0;
 }
 
@@ -114,6 +129,9 @@ function printInstallPlan(targets, options) {
   console.log(`- marketplace: ${targets.marketplaceTarget}`);
   console.log(`- agents: ${targets.agentsTarget}`);
   console.log(`- config: ${targets.codexConfigTarget}`);
+  if (options.installPersistentEnabled) {
+    console.log(`- AGENTS.md: ${targets.agentsMdTarget}`);
+  }
   console.log("\nActions:");
   if (options.installPluginEnabled) {
     console.log("- copy plugin");
@@ -125,6 +143,9 @@ function printInstallPlan(targets, options) {
   console.log("- install support scripts and templates");
   console.log("- update marketplace");
   console.log("- ensure Codex agent config");
+  if (options.installPersistentEnabled) {
+    console.log("- add AGENTS.md persistent resume block");
+  }
   if (options.dryRun) {
     console.log("- dry-run only; no files will be written");
   }

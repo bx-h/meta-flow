@@ -32,6 +32,7 @@ export function resolveTargets({ scope = "repo", target } = {}) {
     marketplaceTarget: path.join(base, ".agents", "plugins", "marketplace.json"),
     agentsTarget: path.join(base, ".codex", "agents"),
     codexConfigTarget: path.join(base, ".codex", "config.toml"),
+    agentsMdTarget: path.join(base, "AGENTS.md"),
     supportTarget: path.join(base, ".meta-flow"),
     scriptsTarget: path.join(base, ".meta-flow", "scripts"),
     templatesTarget: path.join(base, ".meta-flow", "templates"),

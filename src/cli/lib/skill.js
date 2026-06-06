@@ -34,7 +34,7 @@ export async function validateInstalledSkill(targets) {
   if (!/^---\n[\s\S]*?name:\s*meta-flow[\s\S]*?---/m.test(skill)) {
     errors.push("discoverable SKILL.md frontmatter invalid");
   }
-  if (!skill.includes(`${supportRootForSkill(targets)}/scripts/new_task.py`)) {
+  if (!skill.includes(`${supportRootForSkill(targets)}/scripts/controller.py`)) {
     errors.push("discoverable SKILL.md points at the wrong support script path");
   }
   return { skillPath, errors };

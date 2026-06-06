@@ -26,6 +26,14 @@ Repo scope writes:
 - `<repo>/.codex/agents/*.toml`
 - `<repo>/.codex/config.toml`
 
+Add automatic active-task resume for the repository:
+
+```bash
+npx @bx-h/meta-flow@latest install --scope repo --persistent
+```
+
+Persistent mode appends a managed block to `<repo>/AGENTS.md`. The default install does not change `AGENTS.md`.
+
 ## User Scope
 
 Install for the current user:
@@ -43,6 +51,14 @@ User scope writes:
 - `~/.agents/plugins/marketplace.json`
 - `~/.codex/agents/*.toml`
 - `~/.codex/config.toml`
+
+User-scope persistent mode is supported but broad:
+
+```bash
+npx @bx-h/meta-flow@latest install --scope user --persistent
+```
+
+It writes a managed block to `~/AGENTS.md`, which can affect every workspace under the home directory. Prefer repo-scope persistent mode unless that broad behavior is intentional.
 
 ## Dry Run
 
@@ -95,6 +111,7 @@ Uninstall removes:
 - managed support scripts and templates
 - the meta-flow marketplace entry
 - agent TOML files with the meta-flow marker
+- the meta-flow managed block in `AGENTS.md`, if present
 
 It does not delete `.meta-flow/tasks` by default.
 

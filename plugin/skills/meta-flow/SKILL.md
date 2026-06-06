@@ -9,6 +9,33 @@ Meta-flow turns a vague request into a controlled Codex workflow with proposal r
 
 Use it when reliability matters more than speed. Do not use it for small direct edits, one-off answers, simple code explanations, or tasks without observable acceptance criteria.
 
+## Runtime Control
+
+Meta-flow is a long-running workflow. Do not rely on chat memory to know where the workflow is. The runtime controller is the source of truth for the current task, phase, next action, open gate, and allowed transition.
+
+Before acting on an existing meta-flow task, run:
+
+```bash
+python3 .meta-flow/scripts/controller.py resume --format codex
+```
+
+If no active task exists and the user is starting a new meta-flow task, run:
+
+```bash
+python3 .meta-flow/scripts/controller.py start "<raw request>" --format codex
+```
+
+When user scope is installed, the materialized Skill may point these commands at `~/.meta-flow/scripts/`. Task state should still be interpreted as workspace state unless the user explicitly chooses another root.
+
+The controller output must drive the next response:
+
+- Tell the user the current user-facing stage.
+- Do only the next bounded action.
+- Do not directly edit `state.phase`.
+- After producing the required artifact, validate it and call `controller.py advance`.
+- If a gate is open, ask for the user's decision and do not continue until the gate is decided.
+- If the controller rejects a transition, explain the blocker instead of skipping phases.
+
 ## Trigger Conditions
 
 - The request is vague or has unclear boundaries.
@@ -83,12 +110,12 @@ Stop conditions:
 1. Create a task directory:
 
    ```bash
-   python3 .meta-flow/scripts/new_task.py "<raw request>"
+   python3 .meta-flow/scripts/controller.py start "<raw request>" --format codex
    ```
 
-2. Save the raw request in `raw-request.md`.
+2. Follow the controller `next_action`.
 3. Invoke `questioner`.
-4. If blocking questions exist, ask the user before continuing.
+4. If blocking questions exist, open or respect a user gate before continuing.
 5. Generate `goal-contract.json`.
 6. Validate it:
 
@@ -96,25 +123,36 @@ Stop conditions:
    python3 .meta-flow/scripts/validate_goal_contract.py <task-dir>/goal-contract.json
    ```
 
-7. Invoke `researcher_proposer` to create `proposal.md`.
-8. Invoke `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer`, preferably in parallel.
-9. Run the mechanical aggregator:
+7. Advance only through the controller:
+
+   ```bash
+   python3 .meta-flow/scripts/controller.py advance <task-id> --event goal_contract_drafted --reason "Goal contract drafted."
+   ```
+
+8. Enter the proposal drafting node before writing `proposal.md`:
+
+   ```bash
+   python3 .meta-flow/scripts/controller.py advance <task-id> --event proposal_started --reason "Proposal research started."
+   ```
+
+9. Invoke `researcher_proposer` to create `proposal.md`.
+10. Invoke `product_reviewer`, `technical_reviewer`, `risk_reviewer`, and `verification_reviewer`, preferably in parallel when the user explicitly allows subagents.
+11. Run the mechanical aggregator:
 
    ```bash
    python3 .meta-flow/scripts/aggregate_reviews.py --reviews-dir <task-dir>/reviews --output <task-dir>/review-aggregate.json
    ```
 
-10. Invoke `adjudicator`.
-11. Validate `adjudication-report.json`.
-12. If the decision is `revise_proposal`, return to `researcher_proposer`.
-13. If the decision is `ask_user`, ask the user.
-14. If the decision is `accept`, invoke `proposal_summarizer`.
-15. Show `proposal-summary.md` to the user and require confirmation.
+12. Invoke `adjudicator`.
+13. Validate `adjudication-report.json`.
+14. Route through controller events such as `adjudication_accept`, `adjudication_revise`, or `adjudication_ask_user`.
+15. If the decision is `accept`, invoke `proposal_summarizer`.
+16. Show `proposal-summary.md` to the user, open a `proposal_confirmation` gate, and only after an `accept` gate decision call `proposal_accepted`.
 
 ## Execution Phase Procedure
 
 1. Invoke `planner` to create `milestone-plan.json`.
-2. Validate it and ask the user to confirm the plan.
+2. Validate it, open a `plan_confirmation` gate, and only after an `accept` gate decision call `plan_accepted`.
 3. Select one current milestone.
 4. Invoke `task_decomposer` to create `task-list.json`.
 5. Validate the task list.
@@ -132,8 +170,8 @@ Stop conditions:
    - `ask_user`: ask user before continuing.
    - `abort`: generate blocked/final report as appropriate.
 10. After all milestones complete, invoke `final_summarizer`.
-11. Show `final-report.md` and require final user confirmation.
-12. Mark `state.json.status = done` and `phase = DONE`.
+11. Show `final-report.md`, open a `final_confirmation` gate, and require final user confirmation.
+12. Mark completion through the controller with `final_accepted` only after an `accept` gate decision; do not edit `state.json` directly.
 
 ## Role Boundaries
 
@@ -156,4 +194,4 @@ Stop conditions:
 
 ## Required Artifacts
 
-Task directories should use the templates in `.meta-flow/templates/` and keep state in `state.json`. Scripts in `.meta-flow/scripts/` provide initialization, validation, aggregation, and status reporting.
+Task directories should use the templates in `.meta-flow/templates/` and keep state in `state.json`. The runtime also keeps `.meta-flow/active-task.json`, `.meta-flow/task-index.json`, per-task `events.ndjson`, and optional `gates/*.json`. Scripts in `.meta-flow/scripts/` provide initialization, validation, aggregation, controller-based routing, and status reporting.

@@ -7,6 +7,7 @@ import { inspectCodexConfig } from "../lib/codex_config.js";
 import { pathExists, readJsonOrDefault } from "../lib/fs_safe.js";
 import { createLogger } from "../lib/logger.js";
 import { marketplaceEntry } from "../lib/marketplace.js";
+import { inspectPersistentBlock } from "../lib/persistent.js";
 import { resolveTargets, sampleTaskRoot } from "../lib/paths.js";
 import { validateInstalledSkill } from "../lib/skill.js";
 import { HELP_SCRIPT_FILES, validateSupportFiles } from "../lib/support.js";
@@ -36,6 +37,7 @@ export async function runDoctor(argv = []) {
   results.push(await checkMarketplace(targets));
   results.push(await checkAgents(targets));
   results.push(await checkConfig(targets));
+  results.push(await checkPersistent(targets));
   results.push(await checkPythonScripts(targets));
   results.push(await checkInstalledTemplates(targets));
   results.push(await checkSampleTask(targets));
@@ -167,6 +169,17 @@ async function checkConfig(targets) {
     return { level: "WARN", title: "Codex agents config incomplete", message: "Run install --force to patch existing settings if desired." };
   }
   return { level: "PASS", title: "Codex agents config present" };
+}
+
+async function checkPersistent(targets) {
+  const result = await inspectPersistentBlock(targets);
+  if (!result.valid) {
+    return { level: "FAIL", title: "persistent AGENTS block invalid", message: result.errors.join("; ") };
+  }
+  if (result.enabled) {
+    return { level: "PASS", title: "persistent AGENTS block present" };
+  }
+  return { level: "PASS", title: "persistent AGENTS block disabled" };
 }
 
 async function checkPythonScripts(targets) {

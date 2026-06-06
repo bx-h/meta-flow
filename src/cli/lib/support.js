@@ -6,6 +6,7 @@ import { scriptsSource, templatesSource } from "./paths.js";
 export const REQUIRED_SCRIPT_FILES = [
   "_common.py",
   "aggregate_reviews.py",
+  "controller.py",
   "new_task.py",
   "status.py",
   "validate_adjudication.py",
