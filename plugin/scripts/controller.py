@@ -556,6 +556,29 @@ def artifact_candidates(task_dir: Path, name: str) -> list[Path]:
     return [*index_artifact_paths(task_dir, name), *legacy_artifact_candidates(task_dir, name)]
 
 
+def recorded_artifact_path(task_dir: Path, name: str, *, event: str | None = None, node: str | None = None, status: str = "done") -> Path | None:
+    index = load_artifact_index(task_dir)
+    artifacts = index.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return None
+    for entry in reversed(artifacts):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("name") != name or entry.get("status") != status:
+            continue
+        if event is not None and entry.get("event") != event:
+            continue
+        if node is not None and entry.get("node") != node:
+            continue
+        for field in ("display_path", "canonical_path"):
+            value = entry.get(field)
+            if isinstance(value, str) and value:
+                path = task_dir / value
+                if path.exists():
+                    return path
+    return None
+
+
 def latest_existing_path(paths: list[Path]) -> Path | None:
     existing = [path for path in paths if path.exists()]
     if not existing:
@@ -838,6 +861,7 @@ def initial_state(task_id: str, timestamp: str) -> dict[str, Any]:
         "task_repair_attempts": {},
         "current_milestone_id": None,
         "current_task_id": None,
+        "current_repair_root_task_id": None,
         "max_proposal_rework_rounds": 3,
         "max_task_repair_rounds": 2,
         "max_direction_adjustment_rounds": 2,
@@ -1487,6 +1511,7 @@ def status_payload(task_dir: Path) -> dict[str, Any]:
         "phase_label": PHASE_LABELS.get(phase, phase),
         "current_milestone_id": state.get("current_milestone_id"),
         "current_task_id": state.get("current_task_id"),
+        "current_repair_root_task_id": state.get("current_repair_root_task_id"),
         "last_route_decision": state.get("last_route_decision", ""),
         "delegation_authorization": delegation_authorization(state),
         "open_gate": gate,
@@ -1670,12 +1695,123 @@ def enforce_loop_limits(state: dict[str, Any], event: str) -> None:
             raise SystemExit("Direction adjustment limit exceeded; route to block or ask_user.")
         state["direction_adjustment_round"] = current
     if event == "verification_revise":
-        task_id = state.get("current_task_id") or "__unassigned__"
+        task_id = state.get("current_repair_root_task_id") or state.get("current_task_id")
+        if not isinstance(task_id, str) or not task_id.strip():
+            raise SystemExit("Cannot count task repair attempt; current_task_id is missing. Advance task_selected with a concrete_task_id first.")
         attempts = state.setdefault("task_repair_attempts", {})
         current = int(attempts.get(task_id, 0)) + 1
         if current > int(state.get("max_task_repair_rounds", 2)):
             raise SystemExit("Task repair limit exceeded; route to block or ask_user.")
         attempts[task_id] = current
+
+
+def apply_context_from_task_payload(
+    state: dict[str, Any],
+    payload: Any,
+    *,
+    source_name: str = "task payload",
+    require_task_selection: bool = False,
+) -> None:
+    if not isinstance(payload, dict):
+        if require_task_selection:
+            raise SystemExit(f"{source_name} must be a JSON object.")
+        return
+    milestone_id = payload.get("milestone_id")
+    current_milestone_id = state.get("current_milestone_id")
+    if require_task_selection and (not isinstance(milestone_id, str) or not milestone_id.strip()):
+        raise SystemExit(f"{source_name}.milestone_id must be a non-empty string.")
+    if (
+        require_task_selection
+        and isinstance(current_milestone_id, str)
+        and current_milestone_id
+        and isinstance(milestone_id, str)
+        and milestone_id
+        and milestone_id != current_milestone_id
+    ):
+        raise SystemExit(f"{source_name}.milestone_id must match current_milestone_id {current_milestone_id}.")
+    if isinstance(milestone_id, str) and milestone_id:
+        state["current_milestone_id"] = milestone_id
+    concrete_task_id = payload.get("concrete_task_id")
+    if require_task_selection and (not isinstance(concrete_task_id, str) or not concrete_task_id.strip()):
+        raise SystemExit(f"{source_name}.concrete_task_id must be a non-empty string.")
+    if isinstance(concrete_task_id, str) and concrete_task_id:
+        state["current_task_id"] = concrete_task_id
+        repair_root_task_id = payload.get("repairs_concrete_task_id")
+        state["current_repair_root_task_id"] = (
+            repair_root_task_id
+            if isinstance(repair_root_task_id, str) and repair_root_task_id.strip()
+            else concrete_task_id
+        )
+
+
+def milestone_ids_from_plan(task_dir: Path) -> list[str]:
+    path = recorded_artifact_path(task_dir, "milestone-plan.json", event="milestone_plan_created", node="PLANNING")
+    if not path and task_started_before_artifact_adoption(task_dir):
+        path = latest_existing_path(legacy_artifact_candidates(task_dir, "milestone-plan.json"))
+    if not path:
+        return []
+    data = load_json(path)
+    if not isinstance(data, dict):
+        return []
+    milestones = data.get("milestones")
+    if not isinstance(milestones, list):
+        return []
+    ids = []
+    for milestone in milestones:
+        if isinstance(milestone, dict) and isinstance(milestone.get("id"), str) and milestone["id"]:
+            ids.append(milestone["id"])
+    return ids
+
+
+def select_first_milestone_from_plan(task_dir: Path, state: dict[str, Any]) -> None:
+    ids = milestone_ids_from_plan(task_dir)
+    if not ids:
+        return
+    state["current_milestone_id"] = ids[0]
+    state["current_task_id"] = None
+    state["current_repair_root_task_id"] = None
+
+
+def select_next_milestone_from_plan(task_dir: Path, state: dict[str, Any]) -> None:
+    ids = milestone_ids_from_plan(task_dir)
+    if not ids:
+        raise SystemExit("Cannot select next milestone; milestone-plan.json has no milestone ids.")
+    current = state.get("current_milestone_id")
+    if not isinstance(current, str) or current not in ids:
+        raise SystemExit("Cannot select next milestone; current_milestone_id is not in milestone-plan.json.")
+    index = ids.index(current)
+    if index + 1 >= len(ids):
+        raise SystemExit("Cannot select next milestone; current_milestone_id is already the final milestone.")
+    state["current_milestone_id"] = ids[index + 1]
+    state["current_task_id"] = None
+    state["current_repair_root_task_id"] = None
+
+
+def sync_current_context_from_artifacts(task_dir: Path, state: dict[str, Any], event: str, from_phase: str | None) -> None:
+    if event == "plan_accepted":
+        select_first_milestone_from_plan(task_dir, state)
+        return
+    if event == "milestone_selected":
+        select_next_milestone_from_plan(task_dir, state)
+        return
+    if event == "tasks_decomposed":
+        for spec in artifact_specs_for_event(event, from_phase):
+            if spec.get("name") != "task-list.json":
+                continue
+            path = artifact_path_for_spec(task_dir, event, from_phase, spec)
+            if path:
+                apply_context_from_task_payload(state, load_json(path), source_name="task-list.json")
+                state["current_task_id"] = None
+                state["current_repair_root_task_id"] = None
+        return
+    if event == "task_selected":
+        path = None
+        for spec in artifact_specs_for_event(event, from_phase):
+            if spec.get("name") == "task-spec.json":
+                path = artifact_path_for_spec(task_dir, event, from_phase, spec)
+                break
+        if path:
+            apply_context_from_task_payload(state, load_json(path), source_name="task-spec.json", require_task_selection=True)
 
 
 def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: str | None = None, artifact_refs_arg: list[str] | None = None) -> dict[str, Any]:
@@ -1693,6 +1829,7 @@ def advance_task(root: Path, task_dir: Path, event: str, reason: str, target: st
     enforce_role_artifact_producers(task_dir, event, previous)
     enforce_questioning_clarification_gate(task_dir, event)
     enforce_gate_requirements(task_dir, event)
+    sync_current_context_from_artifacts(task_dir, state, event, previous)
     enforce_loop_limits(state, event)
     recorded_refs = record_artifacts_for_event(task_dir, event, previous, "done", timestamp)
     decided_gate = decided_gate_for_event(task_dir, event)

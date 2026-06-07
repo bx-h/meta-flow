@@ -64,6 +64,64 @@ test("runtime CLI exposes abandon command", async () => {
   assert.equal(await exists(path.join(root, "active-task.json")), false);
 });
 
+test("aggregate-reviews creates nested output directories", async () => {
+  const work = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-aggregate-test-"));
+  const reviewsDir = path.join(work, "reviews");
+  await fs.mkdir(reviewsDir, { recursive: true });
+
+  for (const reviewer of ["product_reviewer", "technical_reviewer", "risk_reviewer", "verification_reviewer"]) {
+    const suggestedChanges = ["product_reviewer", "technical_reviewer"].includes(reviewer)
+      ? [{ code: "TECH-001", message: "Keep structured review data.", severity: "medium" }]
+      : [];
+    await fs.writeFile(
+      path.join(reviewsDir, `${reviewer}.json`),
+      JSON.stringify({
+        producer: { agent_name: reviewer, execution_mode: "spawned_agent" },
+        task_id: "T-aggregate",
+        reviewer,
+        decision: "pass",
+        confidence: 0.9,
+        summary: `${reviewer} passed.`,
+        blocking_issues: [],
+        suggested_changes: suggestedChanges,
+        missing_information: [],
+        evidence_refs: []
+      })
+    );
+  }
+
+  const output = path.join(work, "artifacts", "by-node", "05-PROPOSAL_REVIEW", "done", "review-aggregate.json");
+  const aggregate = spawnSync("node", [CLI, "aggregate-reviews", "--reviews-dir", reviewsDir, "--output", output], {
+    encoding: "utf8"
+  });
+  assert.equal(aggregate.status, 0, aggregate.stderr);
+  assert.equal(await exists(output), true);
+  const payload = JSON.parse(await fs.readFile(output, "utf8"));
+  assert.equal(payload.task_id, "T-aggregate");
+  assert.equal(payload.overall_mechanical_result, "pass");
+  assert.equal(payload.reviewers.length, 4);
+  assert.deepEqual(payload.all_suggested_changes, [
+    { code: "TECH-001", message: "Keep structured review data.", severity: "medium" }
+  ]);
+  assert.deepEqual(payload.suggested_changes_by_reviewer, [{
+    reviewer: "product_reviewer",
+    value: { code: "TECH-001", message: "Keep structured review data.", severity: "medium" }
+  }, {
+    reviewer: "technical_reviewer",
+    value: { code: "TECH-001", message: "Keep structured review data.", severity: "medium" }
+  }]);
+});
+
+test("aggregate-reviews exposes command-specific help", () => {
+  const help = spawnSync("node", [CLI, "aggregate-reviews", "--help"], {
+    encoding: "utf8"
+  });
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /--reviews-dir/);
+  assert.match(help.stdout, /--output/);
+  assert.match(help.stdout, /--task-id/);
+});
+
 test("direct python helpers do not create __pycache__", async () => {
   const pycache = path.resolve("plugin", "scripts", "__pycache__");
   await fs.rm(pycache, { recursive: true, force: true });

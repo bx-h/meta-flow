@@ -14,5 +14,8 @@
   ],
   "all_blocking_issues": [],
   "all_suggested_changes": [],
-  "all_missing_information": []
+  "all_missing_information": [],
+  "blocking_issues_by_reviewer": [],
+  "suggested_changes_by_reviewer": [],
+  "missing_information_by_reviewer": []
 }

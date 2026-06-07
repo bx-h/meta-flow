@@ -16,11 +16,11 @@ const COMMANDS = {
 };
 
 export async function main(argv = []) {
-  if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
+  if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") {
     printHelp();
     return 0;
   }
-  if (argv.includes("--version")) {
+  if (argv[0] === "--version") {
     return runVersion();
   }
   const [command, ...rest] = argv;

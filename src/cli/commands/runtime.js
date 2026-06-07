@@ -37,6 +37,12 @@ Aliases:
 }
 
 export async function runRuntimeCommand(command, argv = []) {
+  if (command === "validate") {
+    return runValidate(argv);
+  }
+  if (command === "aggregate-reviews") {
+    return runPython("aggregate_reviews.py", argv);
+  }
   if (helpRequested(argv)) {
     console.log(runtimeHelp());
     return 0;
@@ -44,12 +50,6 @@ export async function runRuntimeCommand(command, argv = []) {
   if (CONTROLLER_COMMANDS.has(command)) {
     const { root, rest } = extractRoot(argv);
     return runPython("controller.py", ["--root", root, command, ...rest], { root });
-  }
-  if (command === "validate") {
-    return runValidate(argv);
-  }
-  if (command === "aggregate-reviews") {
-    return runPython("aggregate_reviews.py", argv);
   }
   throw new Error(`Unknown runtime command: ${command}`);
 }

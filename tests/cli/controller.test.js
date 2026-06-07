@@ -464,6 +464,66 @@ test("controller requires decided confirmation gates before user acceptance even
   assert.equal(JSON.parse(artifactValidation.stdout).ok, true);
 });
 
+test("controller tracks selected milestone from milestone plan", async () => {
+  const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-milestone-selection-test-")), ".meta-flow");
+  assert.equal(runController(root, ["start", "Track milestones", "--task-id", "T-milestones"]).status, 0);
+  authorizeDelegation(root);
+  const taskDir = path.join(root, "tasks", "T-milestones");
+
+  await writeQuestioningReport(taskDir);
+  await writeArtifact(taskDir, "goal-contract.json", jsonArtifact("questioner"));
+  assert.equal(runController(root, ["advance", "--event", "goal_contract_drafted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "proposal_started"]).status, 0);
+  await writeArtifact(taskDir, "proposal.md", markdownArtifact("researcher_proposer", "proposal\n"));
+  assert.equal(runController(root, ["advance", "--event", "proposal_created"]).status, 0);
+  await writeArtifact(taskDir, "review-aggregate.json", reviewAggregateArtifact());
+  assert.equal(runController(root, ["advance", "--event", "reviews_aggregated"]).status, 0);
+  await writeArtifact(taskDir, "adjudication-report.json", jsonArtifact("adjudicator"));
+  assert.equal(runController(root, ["advance", "--event", "adjudication_accept"]).status, 0);
+  await writeArtifact(taskDir, "proposal-summary.md", markdownArtifact("proposal_summarizer", "summary\n"));
+  assert.equal(runController(root, ["advance", "--event", "proposal_summarized"]).status, 0);
+  await decideAcceptGate(root, "proposal_confirmation", "Accept proposal?");
+  assert.equal(runController(root, ["advance", "--event", "proposal_accepted"]).status, 0);
+  assert.equal(runController(root, ["advance", "--event", "planning_started"]).status, 0);
+  await writeArtifact(taskDir, "milestone-plan.json", jsonArtifact("planner", {
+    milestones: [
+      { id: "M1", objective: "first" },
+      { id: "M2", objective: "second" }
+    ]
+  }));
+  assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
+  await writeArtifact(taskDir, "milestone-plan.json", jsonArtifact("planner", {
+    milestones: [
+      { id: "M2", objective: "stray second" },
+      { id: "M1", objective: "stray first" }
+    ]
+  }));
+  await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
+  const accepted = runController(root, ["advance", "--event", "plan_accepted", "--format", "json"]);
+  assert.equal(accepted.status, 0, accepted.stderr);
+  assert.equal(JSON.parse(accepted.stdout).current_milestone_id, "M1");
+  assert.equal(JSON.parse(accepted.stdout).current_task_id, null);
+
+  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer", { milestone_id: "M1", tasks: [{ id: "T1" }] }));
+  assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M1", concrete_task_id: "T1" }));
+  assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor", { task_id: "T1" }));
+  assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
+  await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier", { decision: "pass", task_id: "T1" }));
+  assert.equal(runController(root, ["advance", "--event", "verification_passed"]).status, 0);
+  await writeArtifact(taskDir, "direction-evaluation.json", jsonArtifact("direction_evaluator", { completed_milestone_id: "M1" }));
+  assert.equal(runController(root, ["advance", "--event", "milestone_completed"]).status, 0);
+  await writeArtifact(taskDir, "direction-evaluation.json", jsonArtifact("direction_evaluator", { route: "continue", completed_milestone_id: "M1" }));
+  assert.equal(runController(root, ["advance", "--event", "direction_continue"]).status, 0);
+  const next = runController(root, ["advance", "T-milestones", "--event", "milestone_selected", "--format", "json"]);
+  assert.equal(next.status, 0, next.stderr);
+  const payload = JSON.parse(next.stdout);
+  assert.equal(payload.phase, "MILESTONE_SELECTED");
+  assert.equal(payload.current_milestone_id, "M2");
+  assert.equal(payload.current_task_id, null);
+});
+
 test("controller maintains artifact layout for main execution nodes", async () => {
   const root = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-controller-artifacts-test-")), ".meta-flow");
   assert.equal(runController(root, ["start", "Run full artifact layout", "--task-id", "T-artifacts"]).status, 0);
@@ -492,9 +552,9 @@ test("controller maintains artifact layout for main execution nodes", async () =
   assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
   await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
   assert.equal(runController(root, ["advance", "--event", "plan_accepted"]).status, 0);
-  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer"));
+  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer", { milestone_id: "M1", tasks: [{ id: "T1" }] }));
   assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
-  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer"));
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M1", concrete_task_id: "T1" }));
   assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
   await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor"));
   assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
@@ -558,10 +618,29 @@ test("controller keeps repeated loop artifacts distinct and records repair node 
   assert.equal(runController(root, ["advance", "--event", "milestone_plan_created"]).status, 0);
   await decideAcceptGate(root, "plan_confirmation", "Accept plan?");
   assert.equal(runController(root, ["advance", "--event", "plan_accepted"]).status, 0);
-  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer"));
+  await writeArtifact(taskDir, "task-list.json", jsonArtifact("task_decomposer", { milestone_id: "M1", tasks: [{ id: "T1" }] }));
   assert.equal(runController(root, ["advance", "--event", "tasks_decomposed"]).status, 0);
-  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { attempt: 0 }));
+  const decomposedStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(decomposedStatus.current_milestone_id, "M1");
+  assert.equal(decomposedStatus.current_task_id, null);
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M1", attempt: 0 }));
+  const missingTaskId = runController(root, ["advance", "--event", "task_selected"]);
+  assert.notEqual(missingTaskId.status, 0);
+  assert.match(`${missingTaskId.stdout}\n${missingTaskId.stderr}`, /task-spec\.json\.concrete_task_id must be a non-empty string/);
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { concrete_task_id: "T1", attempt: 0 }));
+  const missingMilestoneId = runController(root, ["advance", "--event", "task_selected"]);
+  assert.notEqual(missingMilestoneId.status, 0);
+  assert.match(`${missingMilestoneId.stdout}\n${missingMilestoneId.stderr}`, /task-spec\.json\.milestone_id must be a non-empty string/);
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M999", concrete_task_id: "T1", attempt: 0 }));
+  const wrongMilestoneId = runController(root, ["advance", "--event", "task_selected"]);
+  assert.notEqual(wrongMilestoneId.status, 0);
+  assert.match(`${wrongMilestoneId.stdout}\n${wrongMilestoneId.stderr}`, /task-spec\.json\.milestone_id must match current_milestone_id M1/);
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M1", concrete_task_id: "T1", attempt: 0 }));
   assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  const selectedStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(selectedStatus.current_milestone_id, "M1");
+  assert.equal(selectedStatus.current_task_id, "T1");
+  assert.equal(selectedStatus.current_repair_root_task_id, "T1");
   await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor", { attempt: 0 }));
   assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
 
@@ -571,17 +650,28 @@ test("controller keeps repeated loop artifacts distinct and records repair node 
 
   await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier", { decision: "revise", attempt: 1 }));
   assert.equal(runController(root, ["advance", "--event", "verification_revise"]).status, 0);
+  let state = await readJson(path.join(taskDir, "state.json"));
+  assert.equal(state.task_repair_attempts.T1, 1);
+  assert.equal(state.task_repair_attempts.__unassigned__, undefined);
   const repairStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
   assert.equal(repairStatus.phase, "TASK_REPAIR");
   assert.equal(repairStatus.next_action.execution_mode, "spawn_agent_required");
   assert.deepEqual(repairStatus.next_action.required_agents, ["task_decomposer"]);
   assert.deepEqual(repairStatus.expected_artifacts_by_event.task_selected, ["task-spec.json"]);
-  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { attempt: 1 }));
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M1", concrete_task_id: "T1-repair", repairs_concrete_task_id: "T1", attempt: 1 }));
   assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  const repairSelectedStatus = JSON.parse(runController(root, ["status", "--format", "json"]).stdout);
+  assert.equal(repairSelectedStatus.current_task_id, "T1-repair");
+  assert.equal(repairSelectedStatus.current_repair_root_task_id, "T1");
   await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor", { attempt: 1 }));
   assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
   await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier", { decision: "revise", attempt: 2 }));
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M999", concrete_task_id: "STRAY", attempt: 999 }));
   assert.equal(runController(root, ["advance", "--event", "verification_revise"]).status, 0);
+  state = await readJson(path.join(taskDir, "state.json"));
+  assert.equal(state.task_repair_attempts.T1, 2);
+  assert.equal(state.task_repair_attempts.STRAY, undefined);
+  assert.equal(state.task_repair_attempts["T1-repair"], undefined);
 
   const validation = runController(root, ["artifacts", "validate", "T-loop", "--format", "json"]);
   assert.equal(validation.status, 0, validation.stderr);
@@ -598,6 +688,15 @@ test("controller keeps repeated loop artifacts distinct and records repair node 
   );
   const repairTaskSpec = artifactIndex.artifacts.find((entry) => entry.event === "task_selected" && entry.node_key === "17-TASK_REPAIR");
   assert.equal(repairTaskSpec?.display_path, "artifacts/by-node/17-TASK_REPAIR/done/task-spec.json");
+
+  await writeArtifact(taskDir, "task-spec.json", jsonArtifact("task_decomposer", { milestone_id: "M1", concrete_task_id: "T1-repair-2", repairs_concrete_task_id: "T1", attempt: 2 }));
+  assert.equal(runController(root, ["advance", "--event", "task_selected"]).status, 0);
+  await writeArtifact(taskDir, "task-execution-report.json", jsonArtifact("executor", { attempt: 2 }));
+  assert.equal(runController(root, ["advance", "--event", "task_executed"]).status, 0);
+  await writeArtifact(taskDir, "task-verification-report.json", jsonArtifact("result_verifier", { decision: "revise", attempt: 3 }));
+  const overLimit = runController(root, ["advance", "--event", "verification_revise"]);
+  assert.notEqual(overLimit.status, 0);
+  assert.match(`${overLimit.stdout}\n${overLimit.stderr}`, /Task repair limit exceeded/);
 
   const corruptedIndex = JSON.parse(JSON.stringify(artifactIndex));
   const corruptedRepairTaskSpec = corruptedIndex.artifacts.find((entry) => entry.event === "task_selected" && entry.node_key === "17-TASK_REPAIR");

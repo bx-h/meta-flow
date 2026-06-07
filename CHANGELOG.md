@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.11
+
+- Harden milestone selection so accepted plans read the recorded `milestone_plan_created` artifact instead of newer stray root/legacy files.
+- Track `current_milestone_id`, `current_task_id`, and `current_repair_root_task_id` through controller transitions, including repair specs that use a new concrete task id while pointing back to the original task.
+- Require selected task specs to include a matching `milestone_id` and non-empty `concrete_task_id`, preventing unassigned repair counters and cross-milestone task drift.
+- Make `aggregate-reviews` create nested output directories and preserve structured review items while keeping the legacy `all_*` value-array contract.
+- Let `meta-flow aggregate-reviews --help` show command-specific options instead of the generic runtime help.
+- Add regression coverage for accepted-plan stray files, task-selection validation, repair loop limits, structured review aggregation, and command-specific help.
+
 ## 0.1.10
 
 - Add a task-level `delegation_authorization` user gate before spawned role work, so user authorization for sub-agents/delegation/parallel agent work is explicit and recorded in task state.

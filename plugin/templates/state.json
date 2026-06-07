@@ -8,6 +8,7 @@
   "task_repair_attempts": {},
   "current_milestone_id": null,
   "current_task_id": null,
+  "current_repair_root_task_id": null,
   "max_proposal_rework_rounds": 3,
   "max_task_repair_rounds": 2,
   "max_direction_adjustment_rounds": 2,
