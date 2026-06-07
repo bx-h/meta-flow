@@ -131,7 +131,7 @@ meta-flow 的 description 很宽，容易在“模糊、多步骤、高可靠”
    加一个 `active-task.json` 能缓解恢复问题，但不能解决 phase transition、gate、subagent、role execution 都靠模型自觉的问题。会继续在错误抽象上堆补丁。
 
 2. 反对直接引入 LangGraph / Temporal：
-   它们能解决 durable execution，但会显著改变项目定位、依赖体积和安装复杂度。legacy 明确偏向 Codex-native、低依赖。当前问题可以先用文件状态机和 support scripts 解决。
+   它们能解决 durable execution，但会显著改变项目定位、依赖体积和安装复杂度。legacy 明确偏向轻量 Codex 集成、低依赖。当前问题可以先用文件状态机和 support scripts 解决。
 
 3. 反对把 meta-flow 写进全局 AGENTS.md 默认启用：
    这会污染所有任务，让小改动也被长程 workflow 拦截。持久模式必须 opt-in，且 repo scope 默认比 user scope 安全。
@@ -154,11 +154,11 @@ meta-flow 的 description 很宽，容易在“模糊、多步骤、高可靠”
 
 结论：不推荐。
 
-### 方案 B：Codex-native 文件运行时
+### 方案 B：面向 Codex 集成的文件运行时
 
 保留低依赖。新增 meta-flow runtime controller，核心状态、事件、gate、resume prompt 都写文件。Skill 变成入口，persistent mode 通过 AGENTS managed block 或 hook opt-in 启用。
 
-优点：符合 Codex-native，低依赖，可分阶段落地，能解释并解决当前问题。
+优点：符合当前 Codex 集成形态，低依赖，可分阶段落地，能解释并解决当前问题。
 
 缺点：需要较大重构，尤其是 CLI/support scripts/Skill 文档。
 
@@ -178,12 +178,12 @@ meta-flow 的 description 很宽，容易在“模糊、多步骤、高可靠”
 
 把 meta-flow 的 workflow spec 保持为文件化定义，但 runtime 提供两种 backend：
 
-- 默认 backend：Codex-native file controller。
+- 默认 backend：面向 Codex 集成的 file controller。
 - 可选 backend：LangGraph 或 OpenAI Agents SDK + durable workflow integration。
 
 优点：长期可扩展，便于以后支持服务端运行、trace、durable worker。
 
-缺点：短期会显著扩大设计面，需要同时维护两套 runtime 语义。最容易失败的地方是：Codex-native 用户路径还没跑稳，就先被框架抽象拖复杂。
+缺点：短期会显著扩大设计面，需要同时维护两套 runtime 语义。最容易失败的地方是：当前 Codex 集成用户路径还没跑稳，就先被框架抽象拖复杂。
 
 结论：可以作为后续路线，但不应该是第一版重构目标。
 
@@ -192,7 +192,7 @@ meta-flow 的 description 很宽，容易在“模糊、多步骤、高可靠”
 我对比过 LangGraph 和 OpenAI Agents SDK。结论是：
 
 - 如果 meta-flow 要做成独立 agent 应用，LangGraph 更强。
-- 如果 meta-flow 要做成 Codex-native 插件，让用户在 Codex 当前 repo 里自然工作，轻量 file controller 更合适。
+- 如果 meta-flow 第一阶段先做成 Codex 插件，让用户在当前 repo 里自然工作，轻量 file controller 更合适。
 
 LangGraph 的优势非常贴近我们的问题：
 
@@ -205,15 +205,15 @@ LangGraph 的优势非常贴近我们的问题：
 
 - meta-flow 就不再只是 Codex plugin + Skill + support scripts，而会变成一个 Python/JS agent runtime。
 - 用户可能需要运行 LangGraph 应用、配置模型 provider、管理 checkpointer backend，而不是只在 Codex repo 里安装插件。
-- Codex custom agents/subagents、Skill progressive disclosure、AGENTS.md persistent block 这些 Codex-native surface 仍要额外桥接。
+- Codex custom agents/subagents、Skill progressive disclosure、AGENTS.md persistent block 这些 Codex integration surface 仍要额外桥接。
 - artifact 仍然要文件化保存，因为用户要看 proposal、plan、task report；LangGraph checkpoint 本身不能替代可审阅、可 diff 的工作产物。
 - 框架状态会绑定执行模型。将来如果要换 Codex surface 或别的 runtime，迁移成本更高。
 
-OpenAI Agents SDK 的定位也类似：它适合应用代码拥有 orchestration、tool execution、approvals、state 的场景。它有 handoffs、guardrails、tracing、sessions，也可以通过 Dapr/Temporal/Restate/DBOS 等集成做 durable long-running workflow。但这已经是“构建 agent 应用”，不是“安装一个 Codex workflow plugin”。
+OpenAI Agents SDK 的定位也类似：它适合应用代码拥有 orchestration、tool execution、approvals、state 的场景。它有 handoffs、guardrails、tracing、sessions，也可以通过 Dapr/Temporal/Restate/DBOS 等集成做 durable long-running workflow。但这已经是“构建 agent 应用”，不是“安装一个 Codex plugin integration”。
 
 因此我的判断是：
 
-1. 第一版重构做 Codex-native file controller。
+1. 第一版重构做面向 Codex 集成的 file controller。
 2. controller 的 transition table、gate、event log、artifact schema 都按 framework-grade 标准设计。
 3. 不把 runtime 语义写死在 prompt 里，也不写死在 LangGraph 里。
 4. 等验收案例跑通后，如果需要服务端化或多人协作，再考虑把 same workflow spec 编译/迁移到 LangGraph。
@@ -476,7 +476,7 @@ HOME=<tmp-home> node bin/meta-flow.js status --format json
 - adjudicator 独立于 reviewer。
 - direction_evaluator。
 - proposal / plan / final 三类用户 gate。
-- 低依赖、Codex-native、标准库脚本优先。
+- 低依赖、当前 Codex 集成、标准库脚本优先。
 - 安全、幂等、无 postinstall、无 telemetry 的分发原则。
 
 应重构：

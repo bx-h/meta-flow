@@ -469,4 +469,4 @@ git diff --check
 
 ## 最后已知判断
 
-当前方向仍建议保持 Codex-native，而不是引入 LangGraph 一类外部 orchestrator。原因是本项目的核心约束不是通用图执行能力，而是让 Codex 在本地开发环境中按 controller、gate、artifact contract 和 subagent 角色边界工作。引入框架会增加部署和心智成本，暂时不能解决工具层显式授权、Skill 一次性注入、主 Agent 自行扮演角色这些关键问题。
+当前实现仍建议保持轻量 Codex 集成，而不是引入 LangGraph 一类外部 orchestrator。原因是本项目的核心约束不是通用图执行能力，而是让 AI 开发助手在本地开发环境中按 controller、gate、artifact contract 和 subagent 角色边界工作。引入框架会增加部署和心智成本，暂时不能解决工具层显式授权、Skill 一次性注入、主 Agent 自行扮演角色这些关键问题。

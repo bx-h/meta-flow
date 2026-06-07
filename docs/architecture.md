@@ -1,10 +1,10 @@
-> **一句话总结**：Meta Flow uses a Codex Plugin for workflow assets and an npm CLI for safe materialization of discoverable Skills, marketplace entries, custom agents, and validation tools.
+> **一句话总结**：Meta Flow is the workflow layer; the current distribution uses a Codex plugin plus an npm CLI for safe materialization of discoverable Skills, marketplace entries, custom agents, and validation tools.
 
 # Architecture
 
 ## Plugin Plus Installer
 
-The Codex Plugin is the distribution unit for Skill assets. The npm package is the installer and manager.
+The Codex plugin is the current distribution unit for Skill assets. The npm package is the installer and manager.
 
 This split keeps runtime workflow assets separate from installation mechanics:
 
@@ -59,7 +59,7 @@ Task abandonment is distinct from deactivation. `meta-flow abandon [task-id]` re
 
 By-node artifact paths are now the machine contract. Validators and role contracts still use stable artifact names, but the controller provides the exact required by-node path for each node/event. `meta-flow artifacts validate` checks that the manifest and by-node files match the events that have occurred after artifact-index adoption. Legacy tasks without `artifact-index.json` or with the earlier `by-node-v1` layout are accepted for migration/inspection instead of being treated as corrupt.
 
-Persistent mode is a Codex-native opt-in. `meta-flow install --persistent` writes a managed block to `AGENTS.md` that tells Codex to run `meta-flow resume --format codex` before acting when a task may be active. This is the durable surface that prevents the workflow from depending on a Skill staying sticky across turns. The default install does not modify `AGENTS.md`; users can still continue manually with `$meta-flow resume`.
+Persistent mode is a Codex integration opt-in. `meta-flow install --persistent` writes a managed block to `AGENTS.md` that tells Codex to run `meta-flow resume --format codex` before acting when a task may be active. This is the durable surface that prevents the workflow from depending on a Skill staying sticky across turns. The default install does not modify `AGENTS.md`; users can still continue manually with `$meta-flow resume`.
 
 ## Repo Scope Versus User Scope
 

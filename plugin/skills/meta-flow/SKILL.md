@@ -5,7 +5,7 @@ description: Use this workflow for vague, multi-step, high-reliability tasks tha
 
 # Meta-Flow
 
-Meta-flow turns a vague request into a controlled Codex workflow with proposal review, user gates, milestone planning, concrete-task execution, verification, and direction checks.
+Meta-flow turns a vague request into a controlled workflow with proposal review, user gates, milestone planning, concrete-task execution, verification, and direction checks.
 
 Use it when reliability matters more than speed. Do not use it for small direct edits, one-off answers, simple code explanations, or tasks without observable acceptance criteria.
 

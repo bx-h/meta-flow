@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.12
+
+- Rename the public project title and descriptions to Meta Flow instead of a tool-specific Codex-branded title.
+- Reframe Codex wording as the current integration and distribution path rather than the project identity.
+- Update package, plugin, README, architecture, and legacy distribution wording to avoid tool-specific branding.
+
 ## 0.1.11
 
 - Harden milestone selection so accepted plans read the recorded `milestone_plan_created` artifact instead of newer stray root/legacy files.
@@ -56,7 +62,7 @@
 
 ## 0.1.3
 
-- Add a Codex-native runtime controller with active task state, transition enforcement, gates, and resume packs.
+- Add a runtime controller for the Codex integration with active task state, transition enforcement, gates, and resume packs.
 - Add opt-in persistent `AGENTS.md` resume instructions.
 - Require explicit workflow nodes and accepted confirmation gates for proposal, plan, final, and goal-adjustment decisions.
 - Add controller tests and update install, doctor, uninstall, docs, and support wrappers.

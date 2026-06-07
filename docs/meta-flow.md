@@ -1,10 +1,10 @@
-> **一句话总结**：meta-flow 是一套 Codex-native 控制流，用分阶段提问、提案、评审、裁决、拆解、执行、验收和方向复盘，把模糊任务变成可确认、可执行、可回滚的落地流程。
+> **一句话总结**：meta-flow 是一套面向 AI 开发助手的控制流，用分阶段提问、提案、评审、裁决、拆解、执行、验收和方向复盘，把模糊任务变成可确认、可执行、可回滚的落地流程。
 
 # Meta-Flow
 
 Meta-flow is for vague, multi-step, high-reliability work. It keeps discovery, proposal, review, routing, execution, verification, and user confirmation as separate control points.
 
-It is intentionally not a LangGraph, CrewAI, or AutoGen setup. The default implementation uses:
+It is intentionally not a LangGraph, CrewAI, or AutoGen setup. The current Codex integration uses:
 
 - a Skill at `.agents/skills/meta-flow/SKILL.md`
 - custom Codex agents under `.codex/agents/`

@@ -337,7 +337,7 @@ AI 试图继续下一个 milestone。
   - interrupt/resume: `gates/*.json`
   - allowed transitions: controller transition table
   - human-readable status: `resume --format codex`
-- 如果缺少这些能力，不能用“Codex-native”作为降低可靠性的借口。
+- 如果缺少这些能力，不能用当前 Codex 集成边界作为降低可靠性的借口。
 
 ## 7. 安装与发现
 

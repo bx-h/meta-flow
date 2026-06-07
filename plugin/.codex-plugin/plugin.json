@@ -1,7 +1,7 @@
 {
   "name": "meta-flow",
-  "version": "0.1.11",
-  "description": "A Codex workflow for turning vague requests into clarified, reviewed, adjudicated, task-level executed, and verified outcomes.",
+  "version": "0.1.12",
+  "description": "A workflow for turning vague requests into clarified, reviewed, adjudicated, task-level executed, and verified outcomes.",
   "author": {
     "name": "huangbaixi",
     "url": "https://github.com/bx-h/meta-flow"
@@ -21,7 +21,7 @@
   "interface": {
     "displayName": "Meta Flow",
     "shortDescription": "Clarify, review, adjudicate, execute, and verify vague tasks.",
-    "longDescription": "Meta Flow is a Codex workflow for converting vague user requests into goal contracts, reviewed proposals, adjudicated plans, concrete tasks, execution reports, verification reports, and direction evaluations.",
+    "longDescription": "Meta Flow converts vague user requests into goal contracts, reviewed proposals, adjudicated plans, concrete tasks, execution reports, verification reports, and direction evaluations.",
     "developerName": "huangbaixi",
     "category": "Productivity",
     "capabilities": [

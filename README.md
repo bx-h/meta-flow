@@ -1,6 +1,8 @@
-# Meta Flow Codex
+# Meta Flow
 
-Meta Flow is a Codex-native workflow for turning vague requests into clarified goals, reviewed proposals, adjudicated plans, concrete tasks, verified results, and direction-aware iteration.
+Meta Flow is a workflow for turning vague requests into clarified goals, reviewed proposals, adjudicated plans, concrete tasks, verified results, and direction-aware iteration.
+
+The current distribution includes a first-class Codex integration through a plugin, Skill, custom agents, and an npm CLI. The project name and workflow model are Meta Flow, not a tool-specific product name.
 
 ## Install
 
@@ -32,7 +34,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.11 install --scope repo
+npx @bx-h/meta-flow@0.1.12 install --scope repo
 ```
 
 ## Quick Start
@@ -192,7 +194,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.11
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.12
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.
