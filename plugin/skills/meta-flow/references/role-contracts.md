@@ -14,7 +14,7 @@ Role-owned JSON artifacts must include `producer.agent_name=<role>` and `produce
 
 ## Proposal Roles
 
-- `questioner`: turns ambiguity into a small set of high-value questions and a draft goal contract. It does not propose an implementation.
+- `questioner`: turns ambiguity into a small set of high-value, decision-tree ordered questions and a draft goal contract. It inspects available repo evidence before asking the user, includes recommended answers for user-answerable questions, and does not propose an implementation.
 - `researcher_proposer`: researches and writes `proposal.md`. It does not change the goal contract.
 - `product_reviewer`: checks whether the proposal solves the user's real goal.
 - `technical_reviewer`: checks feasibility, complexity, dependencies, and maintainability.

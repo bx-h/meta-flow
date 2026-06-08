@@ -203,6 +203,7 @@ async function checkInstalledTemplates(targets) {
   const scripts = targets.scriptsTarget;
   const templates = targets.templatesTarget;
   const runs = [
+    [path.join(scripts, "validate_questioning_report.py"), path.join(templates, "questioning-report.json")],
     [path.join(scripts, "validate_goal_contract.py"), path.join(templates, "goal-contract.json")],
     [path.join(scripts, "validate_adjudication.py"), path.join(templates, "adjudication-report.json")],
     [path.join(scripts, "validate_milestone_plan.py"), path.join(templates, "milestone-plan.json")],
@@ -225,6 +226,7 @@ async function checkSampleTask(targets) {
   const python = resolvePython();
   const scripts = targets.scriptsTarget;
   const runs = [
+    [path.join(scripts, "validate_questioning_report.py"), path.join(sampleTaskRoot, "questioning-report.json")],
     [path.join(scripts, "validate_goal_contract.py"), path.join(sampleTaskRoot, "goal-contract.json")],
     [path.join(scripts, "validate_adjudication.py"), path.join(sampleTaskRoot, "adjudication-report.json")],
     [path.join(scripts, "validate_milestone_plan.py"), path.join(sampleTaskRoot, "milestone-plan.json")],

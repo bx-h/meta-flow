@@ -86,6 +86,7 @@ async function checkTemplates() {
   const scripts = path.join(pluginSource, "scripts");
   const templates = path.join(pluginSource, "templates");
   const runs = [
+    [path.join(scripts, "validate_questioning_report.py"), path.join(templates, "questioning-report.json")],
     [path.join(scripts, "validate_goal_contract.py"), path.join(templates, "goal-contract.json")],
     [path.join(scripts, "validate_adjudication.py"), path.join(templates, "adjudication-report.json")],
     [path.join(scripts, "validate_milestone_plan.py"), path.join(templates, "milestone-plan.json")],
@@ -106,6 +107,7 @@ async function checkSampleTask() {
   const python = resolvePython();
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-verify-"));
   const runs = [
+    [path.join(pluginSource, "scripts", "validate_questioning_report.py"), path.join(sampleTaskRoot, "questioning-report.json")],
     [path.join(pluginSource, "scripts", "validate_goal_contract.py"), path.join(sampleTaskRoot, "goal-contract.json")],
     [
       path.join(pluginSource, "scripts", "aggregate_reviews.py"),

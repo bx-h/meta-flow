@@ -34,7 +34,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.12 install --scope repo
+npx @bx-h/meta-flow@0.1.13 install --scope repo
 ```
 
 ## Quick Start
@@ -66,6 +66,8 @@ Meta Flow keeps runtime state in `~/.meta-flow/active-task.json`, `~/.meta-flow/
 Before the first spawned role runs, the controller opens a one-time `delegation_authorization` gate. The user must explicitly accept sub-agents/delegation/parallel agent work for that task; the accepted gate is recorded in `state.json` and reused for later role nodes. If the user rejects it, the task is blocked instead of letting the main agent act as a local substitute.
 
 Role phases are delegated work, not local personas. When the controller reports `spawn_agent_required`, the main agent must spawn the listed custom agent(s), such as `product_reviewer`, `technical_reviewer`, `risk_reviewer`, `verification_reviewer`, or `adjudicator`. If spawning is unavailable or rejected, the workflow must stop and report that blocker instead of doing the role locally.
+
+The questioner role uses decision-tree questioning. It should inspect the repository before asking user-answerable questions, ask upstream scope or acceptance decisions before downstream branches, and include a recommended answer for each clarifying question so the user can confirm or edit a concrete default.
 
 The runtime also checks role-owned artifact producer metadata. JSON role artifacts must include `producer.agent_name` and `producer.execution_mode=spawned_agent`; Markdown role artifacts must start with matching producer frontmatter. Review aggregation requires the four expected reviewer agents, each with spawned-agent producer metadata.
 Artifact-producing role agent templates use `workspace-write` so the spawned role can write its own artifact. Their instructions restrict the write scope to the assigned artifact(s), with implementation edits reserved for the `executor` role.
@@ -194,7 +196,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.12
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.13
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.

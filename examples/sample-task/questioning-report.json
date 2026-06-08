@@ -1,25 +1,68 @@
 {
+  "producer": {
+    "agent_name": "questioner",
+    "execution_mode": "spawned_agent"
+  },
   "task_id": "sample-health-check",
   "raw_user_request": "为一个后端项目增加健康检查接口，并确保它有测试和文档。",
   "known_information": [
     "The user wants a backend health check endpoint.",
-    "Tests and documentation are required outputs."
+    "Tests and documentation are required outputs.",
+    "This packaged sample has no application repository files to inspect for existing route conventions; in a real repo, the questioner should inspect routes, docs, and tests before asking."
   ],
   "missing_information": [
     "Backend framework is not specified.",
     "Exact endpoint path is not specified.",
     "Health check depth is not specified."
   ],
-  "clarifying_questions": [
+  "decision_tree": [
     {
-      "question": "Should the endpoint be shallow liveness only, or include dependency checks?",
-      "why_it_matters": "Dependency checks can turn transient database or cache issues into deployment failures.",
-      "blocking": false
+      "axis": "scope",
+      "known": "The user wants a backend health check with tests and docs.",
+      "open_decision": "Whether the first version should be shallow liveness only or include dependency checks.",
+      "question_refs": [
+        "Q1"
+      ],
+      "recommended_default": "Start with shallow liveness only.",
+      "downstream_effect": [
+        "acceptance",
+        "risk"
+      ]
     },
     {
-      "question": "Is there an existing route convention for health endpoints?",
-      "why_it_matters": "Following local route naming prevents compatibility drift.",
-      "blocking": false
+      "axis": "implementation_boundary",
+      "known": "No route convention was specified in the raw request.",
+      "open_decision": "Which user-visible endpoint path should be used if repository inspection finds no existing convention.",
+      "question_refs": [
+        "Q2"
+      ],
+      "recommended_default": "Use GET /healthz only when no existing route convention is found.",
+      "downstream_effect": [
+        "acceptance",
+        "task_decomposition"
+      ]
+    }
+  ],
+  "clarifying_questions": [
+    {
+      "id": "Q1",
+      "question": "Should the endpoint be shallow liveness only, or include dependency checks?",
+      "why_it_matters": "Dependency checks can turn transient database or cache issues into deployment failures.",
+      "blocking": false,
+      "decision_axis": "scope",
+      "depends_on": [],
+      "recommended_answer": "Use shallow liveness only for the first pass; defer dependency probes until there is an explicit operational requirement.",
+      "answer_source": "safe_default"
+    },
+    {
+      "id": "Q2",
+      "question": "If repository inspection finds no existing health endpoint convention, should the user-visible default path be GET /healthz?",
+      "why_it_matters": "The endpoint path is part of the public API boundary and affects tests, docs, and compatibility expectations.",
+      "blocking": false,
+      "decision_axis": "implementation_boundary",
+      "depends_on": [],
+      "recommended_answer": "If no existing convention is found in the repository, use GET /healthz.",
+      "answer_source": "safe_default"
     }
   ],
   "assumptions_if_user_does_not_answer": [

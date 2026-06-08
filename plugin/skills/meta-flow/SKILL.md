@@ -31,6 +31,7 @@ Fallback command forms:
 
 - Controller commands: `python3 .meta-flow/scripts/controller.py --root ~/.meta-flow <command> ...`
 - `validate goal-contract`: `python3 .meta-flow/scripts/validate_goal_contract.py <path>`
+- `validate questioning-report`: `python3 .meta-flow/scripts/validate_questioning_report.py <path>`
 - `validate adjudication`: `python3 .meta-flow/scripts/validate_adjudication.py <path>`
 - `validate milestone-plan`: `python3 .meta-flow/scripts/validate_milestone_plan.py <path>`
 - `validate task-list`: `python3 .meta-flow/scripts/validate_task_list.py <path>`
@@ -57,6 +58,7 @@ The controller output must drive the next response:
 - Do not directly edit `state.phase`.
 - Write required artifacts to the by-node paths returned by the controller, validate them, then call `meta-flow advance`.
 - During `QUESTIONING`, bias toward asking the user: if `questioning-report.json` contains any `clarifying_questions`, or says `can_continue_without_user_answer=false`, open a `clarifying_questions` gate and wait for the user before `goal_contract_drafted`.
+- Questioning is decision-tree driven: the spawned questioner should first inspect repository/docs/config for answerable facts, then ask only high-value user questions ordered by dependency. Each question should include a recommended answer, the decision axis, and any dependency on earlier questions. `decision_tree` is explanatory; every material unresolved user decision must still appear in `clarifying_questions`.
 - If a gate is open, ask for the user's decision and do not continue until the gate is decided.
 - If the controller rejects a transition, explain the blocker instead of skipping phases.
 
@@ -142,6 +144,9 @@ Stop conditions:
 3. If the controller opens a `delegation_authorization` gate, ask the user to explicitly authorize sub-agents/delegation/parallel agent work for this task; do not spawn `questioner` until the gate is accepted.
 4. Spawn `questioner`; only the spawned agent may produce `questioning-report.json` and `goal-contract.json`.
 5. If the spawned `questioner` finds any meaningful user-answerable uncertainty that could change scope, acceptance criteria, risk, UI/UX, dependencies, or implementation direction, it must put that uncertainty in `clarifying_questions`; the main agent then opens a `clarifying_questions` gate and asks the user before continuing. Do this even if the question is not strictly blocking.
+   - The questioner should not ask the user for facts it can answer by reading the codebase, docs, package metadata, config, or existing tests. Those findings belong in `known_information`.
+   - Each clarifying question should include `id`, `decision_axis`, `depends_on`, `recommended_answer`, and `answer_source`.
+   - If later questions depend on one unresolved upstream answer, keep the downstream material decisions in `clarifying_questions` with `depends_on`; use `decision_tree` only to show ordering and question references, not to bypass the clarification gate.
 6. Only skip the clarification gate when the spawned `questioner` produced `clarifying_questions=[]`, `can_continue_without_user_answer=true`, and `assumptions_if_user_does_not_answer` covers any remaining low-impact gaps.
 7. Use the spawned `questioner` outputs `questioning-report.json` and `goal-contract.json`; do not generate them in the main agent.
 8. Validate it:

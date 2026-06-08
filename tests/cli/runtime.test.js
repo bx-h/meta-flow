@@ -64,6 +64,52 @@ test("runtime CLI exposes abandon command", async () => {
   assert.equal(await exists(path.join(root, "active-task.json")), false);
 });
 
+test("runtime CLI validates questioning reports with legacy and rich metadata", async () => {
+  const work = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-questioning-validate-test-"));
+  const legacy = path.join(work, "legacy-questioning-report.json");
+  await fs.writeFile(legacy, JSON.stringify({
+    producer: { agent_name: "questioner", execution_mode: "spawned_agent" },
+    task_id: "T-questioning",
+    raw_user_request: "Clarify this task.",
+    known_information: [],
+    missing_information: [],
+    clarifying_questions: [{
+      question: "What should success mean?",
+      why_it_matters: "Acceptance depends on it.",
+      blocking: true
+    }],
+    assumptions_if_user_does_not_answer: [],
+    can_continue_without_user_answer: false
+  }));
+
+  const legacyValidation = spawnSync("node", [CLI, "validate", "questioning-report", legacy], {
+    encoding: "utf8"
+  });
+  assert.equal(legacyValidation.status, 0, legacyValidation.stderr);
+
+  const richValidation = spawnSync("node", [CLI, "validate", "questioning-report", path.resolve("plugin", "templates", "questioning-report.json")], {
+    encoding: "utf8"
+  });
+  assert.equal(richValidation.status, 0, richValidation.stderr);
+
+  const blocked = path.join(work, "blocked-questioning-report.json");
+  await fs.writeFile(blocked, JSON.stringify({
+    producer: { agent_name: "questioner", execution_mode: "spawned_agent" },
+    task_id: "T-questioning",
+    raw_user_request: "Clarify this task.",
+    known_information: [],
+    missing_information: ["Acceptance target is still unknown."],
+    clarifying_questions: [],
+    assumptions_if_user_does_not_answer: [],
+    can_continue_without_user_answer: true
+  }));
+  const blockedValidation = spawnSync("node", [CLI, "validate", "questioning-report", blocked], {
+    encoding: "utf8"
+  });
+  assert.notEqual(blockedValidation.status, 0);
+  assert.match(blockedValidation.stderr, /missing_information remains/);
+});
+
 test("aggregate-reviews creates nested output directories", async () => {
   const work = await fs.mkdtemp(path.join(os.tmpdir(), "meta-flow-aggregate-test-"));
   const reviewsDir = path.join(work, "reviews");

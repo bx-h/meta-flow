@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.13
+
+- Strengthen the questioner role with decision-tree questioning, repo-first fact discovery, question dependencies, and recommended answers for clarifying questions.
+- Extend the questioning report template with optional decision-tree metadata and richer clarifying-question fields.
+
 ## 0.1.12
 
 - Rename the public project title and descriptions to Meta Flow instead of a tool-specific Codex-branded title.

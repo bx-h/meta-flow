@@ -6,6 +6,7 @@ import { pluginSource } from "../lib/paths.js";
 
 const CONTROLLER_COMMANDS = new Set(["start", "resume", "status", "advance", "gate", "artifacts", "abandon", "deactivate"]);
 const VALIDATE_SCRIPTS = {
+  "questioning-report": "validate_questioning_report.py",
   "goal-contract": "validate_goal_contract.py",
   adjudication: "validate_adjudication.py",
   "milestone-plan": "validate_milestone_plan.py",
@@ -59,6 +60,7 @@ function runValidate(argv) {
     console.log(`Usage: meta-flow validate <kind> [path]
 
 Kinds:
+  questioning-report
   goal-contract
   adjudication
   milestone-plan

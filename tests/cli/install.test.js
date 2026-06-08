@@ -32,7 +32,20 @@ test("repo install creates plugin, marketplace, agents, and config", async () =>
   assert.match(installedSkill, new RegExp(escapeRegex(path.join(target, ".meta-flow", "scripts", "aggregate_reviews.py"))));
   assert.match(installedSkill, /spawn_agent_required/);
   assert.match(installedSkill, /delegation_authorization/);
+  assert.match(installedSkill, /decision-tree driven/);
+  assert.match(installedSkill, /recommended_answer/);
   assert.match(installedSkill, /The main agent must not write reviewer reports/);
+
+  const installedQuestioner = await fs.readFile(path.join(target, ".codex", "agents", "questioner.toml"), "utf8");
+  assert.match(installedQuestioner, /decision-tree questioning/);
+  assert.match(installedQuestioner, /recommended_answer/);
+  assert.match(installedQuestioner, /inspect those sources instead of asking the user/);
+
+  const installedQuestioningTemplate = JSON.parse(await fs.readFile(path.join(target, ".meta-flow", "templates", "questioning-report.json"), "utf8"));
+  assert.equal(Array.isArray(installedQuestioningTemplate.decision_tree), true);
+  assert.equal(installedQuestioningTemplate.clarifying_questions[0].id, "Q1");
+  assert.equal(installedQuestioningTemplate.clarifying_questions[0].recommended_answer, "string");
+  assert.equal(installedQuestioningTemplate.clarifying_questions[0].answer_source, "user_required");
 });
 
 test("repo install with persistent adds an idempotent AGENTS managed block", async () => {

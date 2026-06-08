@@ -63,7 +63,7 @@ flowchart LR
 
 ## Agent Responsibilities
 
-`questioner` clarifies vague input and drafts `questioning-report.json` plus `goal-contract.json`. It asks at most five high-value questions and should bias toward asking when uncertainty can change scope, acceptance criteria, risk, UX, dependencies, or implementation direction. Assumptions are reserved for truly low-impact gaps.
+`questioner` clarifies vague input and drafts `questioning-report.json` plus `goal-contract.json`. It asks at most five high-value questions and should bias toward asking when uncertainty can change scope, acceptance criteria, risk, UX, dependencies, or implementation direction. It uses decision-tree questioning: inspect repo evidence first, identify upstream decision axes, order questions by dependency, and provide a recommended answer for each user-answerable question. Assumptions are reserved for truly low-impact gaps.
 
 `researcher_proposer` reads the goal contract, code, and docs, then writes `proposal.md`. It gives a recommended route, alternatives, tradeoffs, risks, and validation plan. It does not write code or change the goal contract.
 
@@ -257,7 +257,7 @@ The sample task lives at `.meta-flow/examples/sample-task/` and uses the request
 Walkthrough:
 
 1. Raw request is captured in `raw-request.md`.
-2. `questioner` either opens a clarification gate for meaningful questions, or records low-impact assumptions and drafts `questioning-report.json` plus `goal-contract.json`.
+2. `questioner` either opens a clarification gate for meaningful questions, or records low-impact assumptions and drafts `questioning-report.json` plus `goal-contract.json`. Questions should be ordered by decision dependency, include recommended answers, and avoid asking users for facts that can be discovered from the repository.
 3. `researcher_proposer` writes a shallow `GET /healthz` proposal.
 4. Four reviewers pass the proposal and add scoped suggestions.
 5. `aggregate_reviews.py` writes `review-aggregate.json`.
@@ -273,7 +273,7 @@ Walkthrough:
 
 Silent questioning skip: questioner records meaningful questions as non-blocking assumptions and advances without asking the user. Put meaningful questions in `clarifying_questions`; the controller requires a `clarifying_questions` gate before `goal_contract_drafted`.
 
-Infinite questioning: questioner asks low-value questions instead of separating meaningful questions from low-impact assumptions. Limit to five high-value questions.
+Infinite questioning: questioner asks low-value questions instead of separating meaningful questions from low-impact assumptions. Limit to five high-value questions, ask upstream decisions before dependent downstream questions, and include recommended answers so the user can confirm or edit a concrete default.
 
 Generic reviewers: reviewers say "looks good" or "consider edge cases" without evidence. Require concrete issue lists and evidence refs.
 

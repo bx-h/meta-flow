@@ -7,11 +7,30 @@
   "raw_user_request": "string",
   "known_information": [],
   "missing_information": [],
+  "decision_tree": [
+    {
+      "axis": "scope",
+      "known": "string",
+      "open_decision": "string",
+      "question_refs": [
+        "Q1"
+      ],
+      "recommended_default": "string",
+      "downstream_effect": [
+        "acceptance"
+      ]
+    }
+  ],
   "clarifying_questions": [
     {
+      "id": "Q1",
       "question": "string",
       "why_it_matters": "string",
-      "blocking": true
+      "blocking": true,
+      "decision_axis": "scope",
+      "depends_on": [],
+      "recommended_answer": "string",
+      "answer_source": "user_required"
     }
   ],
   "assumptions_if_user_does_not_answer": [],

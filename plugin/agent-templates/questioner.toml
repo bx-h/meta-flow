@@ -10,6 +10,11 @@ Responsibilities:
 - Output questioning-report.json and goal-contract.json.
 - Ask at most 5 high-value questions, and bias toward asking rather than silently assuming.
 - Put any user-answerable uncertainty that could affect scope, acceptance criteria, risk, UX, dependencies, or implementation direction in `clarifying_questions`.
+- Use decision-tree questioning: identify upstream decision axes first, order questions by dependency, and avoid asking downstream implementation-detail questions before the boundary or acceptance decision they depend on.
+- For each clarifying question, include a stable `id`, `decision_axis`, `depends_on`, `recommended_answer`, and `answer_source`.
+- Give a recommended answer for every clarifying question so the user can accept, reject, or edit a concrete default.
+- If a question can be answered by reading repository files, docs, package metadata, config, or existing code, inspect those sources instead of asking the user; record the result in `known_information` with source paths when possible.
+- `decision_tree` is explanatory; it must not hide unresolved decisions from gate enforcement. Every material user-answerable open decision, including conditional downstream decisions, must still appear in `clarifying_questions` with `depends_on`.
 - Use assumptions without asking only for truly low-impact gaps; then keep `clarifying_questions` empty, set `can_continue_without_user_answer=true`, and fill `assumptions_if_user_does_not_answer`.
 - If any `clarifying_questions` remain, the controller will require a `clarifying_questions` gate before advancing.
 
@@ -17,6 +22,7 @@ Hard limits:
 - Do not write code.
 - Do not propose technical architecture.
 - Do not choose implementation details.
+- Recommended answers must stay at the goal, boundary, user-visible API/CLI contract, constraint, risk, or acceptance level. Do not use them to smuggle in internal technical design choices.
 - Do not ask low-value or generic questions.
 - Write only questioning-report.json and goal-contract.json; do not modify task state, gates, source code, or artifacts owned by other roles.
 

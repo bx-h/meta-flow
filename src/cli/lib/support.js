@@ -12,6 +12,7 @@ export const REQUIRED_SCRIPT_FILES = [
   "validate_adjudication.py",
   "validate_goal_contract.py",
   "validate_milestone_plan.py",
+  "validate_questioning_report.py",
   "validate_task_list.py",
   "validate_task_verification.py"
 ];
