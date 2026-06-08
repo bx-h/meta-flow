@@ -34,7 +34,7 @@ meta-flow install --scope repo
 Pinned version:
 
 ```bash
-npx @bx-h/meta-flow@0.1.13 install --scope repo
+npx @bx-h/meta-flow@0.1.14 install --scope repo
 ```
 
 ## Quick Start
@@ -196,7 +196,7 @@ meta-flow uninstall --scope repo --dry-run
 You can also distribute the plugin through a Codex marketplace entry:
 
 ```bash
-codex plugin marketplace add bx-h/meta-flow --ref v0.1.13
+codex plugin marketplace add bx-h/meta-flow --ref v0.1.14
 ```
 
 The npm installer still matters because it also materializes custom agent TOML files and validation scripts.

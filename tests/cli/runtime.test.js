@@ -168,6 +168,24 @@ test("aggregate-reviews exposes command-specific help", () => {
   assert.match(help.stdout, /--task-id/);
 });
 
+test("runtime CLI exposes controller command-specific help", () => {
+  const gateHelp = spawnSync("node", [CLI, "gate", "--help"], {
+    encoding: "utf8"
+  });
+  assert.equal(gateHelp.status, 0, gateHelp.stderr);
+  assert.match(gateHelp.stdout, /Usage:|usage:/);
+  assert.match(gateHelp.stdout, /meta-flow gate decide/);
+  assert.match(gateHelp.stdout, /--decision accept\|reject\|revise\|pause\|abort/);
+
+  const decideHelp = spawnSync("node", [CLI, "gate", "decide", "--help"], {
+    encoding: "utf8"
+  });
+  assert.equal(decideHelp.status, 0, decideHelp.stderr);
+  assert.match(decideHelp.stdout, /usage: meta-flow gate decide/);
+  assert.match(decideHelp.stdout, /--gate GATE/);
+  assert.match(decideHelp.stdout, /--decision \{accept,reject,revise,pause,abort\}/);
+});
+
 test("direct python helpers do not create __pycache__", async () => {
   const pycache = path.resolve("plugin", "scripts", "__pycache__");
   await fs.rm(pycache, { recursive: true, force: true });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.14
+
+- Pass controller subcommand help through the CLI wrapper so commands like `meta-flow gate decide --help` show their real arguments.
+- Expand `meta-flow gate --help` with common open/decide forms, including the accepted `--decision` values.
+
 ## 0.1.13
 
 - Strengthen the questioner role with decision-tree questioning, repo-first fact discovery, question dependencies, and recommended answers for clarifying questions.

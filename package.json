@@ -1,6 +1,6 @@
 {
   "name": "@bx-h/meta-flow",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "A workflow for clarified goals, reviewed proposals, adjudicated plans, task-level execution, verification, and direction-aware iteration.",
   "type": "module",
   "bin": {

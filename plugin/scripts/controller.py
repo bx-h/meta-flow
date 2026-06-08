@@ -2318,7 +2318,10 @@ def render_artifact_validation(result: dict[str, Any], output_format: str) -> No
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Run the meta-flow controller.")
+    parser = argparse.ArgumentParser(
+        description="Run the meta-flow controller.",
+        prog=os.environ.get("META_FLOW_PROG") or None,
+    )
     parser.add_argument("--root", type=Path, default=ROOT, help="Meta-flow runtime root. Defaults to META_FLOW_ROOT or ~/.meta-flow.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -2345,7 +2348,19 @@ def build_parser() -> argparse.ArgumentParser:
     advance.add_argument("--artifact-ref", action="append", default=[], help="Artifact reference to record in the event log.")
     advance.add_argument("--format", choices=["text", "json", "codex"], default="text")
 
-    gate = subparsers.add_parser("gate", help="Open or decide a human gate.")
+    gate = subparsers.add_parser(
+        "gate",
+        help="Open or decide a human gate.",
+        description="Open or decide a human gate.",
+        epilog=(
+            "Common forms:\n"
+            "  meta-flow gate open [task] --type <type> --prompt <text> [--format text|json]\n"
+            "  meta-flow gate decide [task] --gate <gate-id> --decision "
+            "accept|reject|revise|pause|abort [--comment <text>] [--format text|json]\n\n"
+            "Use `meta-flow gate open --help` or `meta-flow gate decide --help` for the full option list."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     gate_subparsers = gate.add_subparsers(dest="gate_command", required=True)
     gate_open = gate_subparsers.add_parser("open", help="Open a human gate.")
     gate_open.add_argument("task", nargs="?", help="Task id or task directory.")

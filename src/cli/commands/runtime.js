@@ -44,13 +44,13 @@ export async function runRuntimeCommand(command, argv = []) {
   if (command === "aggregate-reviews") {
     return runPython("aggregate_reviews.py", argv);
   }
+  if (CONTROLLER_COMMANDS.has(command)) {
+    const { root, rest } = extractRoot(argv);
+    return runPython("controller.py", ["--root", root, command, ...rest], { root, prog: "meta-flow" });
+  }
   if (helpRequested(argv)) {
     console.log(runtimeHelp());
     return 0;
-  }
-  if (CONTROLLER_COMMANDS.has(command)) {
-    const { root, rest } = extractRoot(argv);
-    return runPython("controller.py", ["--root", root, command, ...rest], { root });
   }
   throw new Error(`Unknown runtime command: ${command}`);
 }
@@ -84,6 +84,7 @@ function runPython(scriptName, args, options = {}) {
     env: {
       ...process.env,
       META_FLOW_ROOT: options.root || process.env.META_FLOW_ROOT || defaultRuntimeRoot(),
+      ...(options.prog ? { META_FLOW_PROG: options.prog } : {}),
       PYTHONDONTWRITEBYTECODE: "1"
     }
   });
